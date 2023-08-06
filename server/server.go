@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"github.com/hankeyyh/a-simple-rpc/protocol"
+	"github.com/hankeyyh/a-simple-rpc/share"
 	"github.com/soheilhy/cmux"
 	"io"
 	"log"
@@ -47,20 +49,6 @@ const (
 	ReaderBuffsize = 1024
 )
 
-type methodType struct {
-	sync.Mutex
-	method    reflect.Method
-	ArgType   reflect.Type
-	ReplyType reflect.Type
-}
-
-type service struct {
-	name         string
-	instance     reflect.Value // receiver of methods for the service
-	instanceType reflect.Type  // type of the receiver
-	methodMap    map[string]*methodType
-}
-
 type Server struct {
 	// listener
 	ln net.Listener
@@ -80,6 +68,9 @@ type Server struct {
 	seq           atomic.Uint64
 
 	inShutdown int32
+
+	// 正在处理的请求数量
+	handlerMsgNum int32
 }
 
 type OptionFn func(s *Server)
@@ -180,6 +171,10 @@ func suitableRPCMethods(typ reflect.Type) map[string]*methodType {
 			ArgType:   argType,
 			ReplyType: replyType,
 		}
+
+		// 类型注册到pool中
+		reflectTypePools.Init(argType)
+		reflectTypePools.Init(replyType)
 	}
 	return methodMap
 }
@@ -190,7 +185,7 @@ func (svr *Server) Serve(network, address string) error {
 		return err
 	}
 
-	// todo 注销一切
+	defer svr.UnregisterAll()
 
 	return svr.serveListener(ln)
 }
@@ -241,14 +236,13 @@ func (svr *Server) serveConn(conn net.Conn) {
 
 	defer func() {
 		if err := recover(); err != nil {
-			// todo 输出error日志
-
-			// 关闭连接
-			if svr.isShutdown() {
-				<-svr.doneChan
-			}
-			svr.closeConn(conn)
+			log.Printf("serving %s panic error: %s", conn.RemoteAddr().String(), err)
 		}
+		// 关闭连接
+		if svr.isShutdown() {
+			<-svr.doneChan
+		}
+		svr.closeConn(conn)
 	}()
 
 	// 设置conn的读写超时
@@ -278,9 +272,9 @@ func (svr *Server) serveConn(conn net.Conn) {
 		req, err := svr.readRequest(ctx, r)
 		if err != nil {
 			if err == io.EOF {
-				log.Print("client has closed this connection: %s", conn.RemoteAddr().String())
+				log.Printf("client has closed this connection: %s", conn.RemoteAddr().String())
 			} else if errors.Is(err, net.ErrClosed) {
-				log.Print("connection %s is closed", conn.RemoteAddr().String())
+				log.Printf("connection %s is closed", conn.RemoteAddr().String())
 			} else if errors.Is(err, ErrReqReachLimit) {
 				if !req.IsOneway() {
 					// 请求达到上限
@@ -292,7 +286,7 @@ func (svr *Server) serveConn(conn net.Conn) {
 				}
 				continue
 			} else {
-				log.Print("failed to read request: %v", err)
+				log.Printf("failed to read request: %v", err)
 			}
 			return
 		}
@@ -303,7 +297,7 @@ func (svr *Server) serveConn(conn net.Conn) {
 		if !req.IsHeartbeat() {
 			err = svr.auth(ctx, req)
 			if err != nil {
-				log.Print("auth failed for conn %s: %v", conn.RemoteAddr().String(), err)
+				log.Printf("auth failed for conn %s: %v", conn.RemoteAddr().String(), err)
 				if !req.IsOneway() {
 					res := req.Clone()
 					res.SetMessageType(protocol.Response)
@@ -323,11 +317,13 @@ func (svr *Server) serveConn(conn net.Conn) {
 func (svr *Server) processOneRequest(ctx context.Context, req *protocol.Message, conn net.Conn) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Print("failed to process the request: %v", r)
+			log.Printf("failed to process the request: %v", r)
 		}
 	}()
 
 	// 记录当前处理的请求数量
+	atomic.AddInt32(&svr.handlerMsgNum, 1)
+	defer atomic.AddInt32(&svr.handlerMsgNum, -1)
 
 	// 心跳请求，直接返回
 	if req.IsHeartbeat() {
@@ -338,6 +334,86 @@ func (svr *Server) processOneRequest(ctx context.Context, req *protocol.Message,
 		return
 	}
 
+	res, err := svr.handleRequest(ctx, req)
+	if err != nil {
+		log.Printf("failed to handle request: %v", err)
+	}
+
+	if !req.IsOneway() {
+		svr.sendResponse(conn, res)
+	}
+}
+
+// 处理请求
+func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message) (res *protocol.Message, err error) {
+	// 请求服务，方法
+	servicePath := req.ServicePath
+	serviceMethod := req.ServiceMethod
+	res = req.Clone()
+
+	// 对应的服务
+	svr.serviceMapLock.RLock()
+	svc := svr.serviceMap[servicePath]
+	svr.serviceMapLock.RUnlock()
+	if svc == nil {
+		err = errors.New("can't find service " + servicePath)
+		return svr.handleError(res, err)
+	}
+
+	// 对应的方法
+	methodTyp := svc.methodMap[serviceMethod]
+	if methodTyp == nil {
+		err = errors.New("can't find method " + serviceMethod)
+		return svr.handleError(res, err)
+	}
+
+	// 获取方法的请求参数实例
+	argv := reflectTypePools.Get(methodTyp.ArgType)
+
+	// 反序列化
+	codec := share.Codecs[req.SerializeType()]
+	if codec == nil {
+		err = fmt.Errorf("can not find codec for %d", req.SerializeType())
+		return svr.handleError(res, err)
+	}
+
+	// reply
+	replyv := reflectTypePools.Get(methodTyp.ReplyType)
+
+	// call service method
+	if methodTyp.ArgType.Kind() != reflect.Pointer {
+		err = svc.call(ctx, methodTyp, reflect.ValueOf(argv).Elem(), reflect.ValueOf(replyv))
+	} else {
+		err = svc.call(ctx, methodTyp, reflect.ValueOf(argv), reflect.ValueOf(replyv))
+	}
+
+	// 重新将argv, replyv 加入缓存
+	reflectTypePools.Put(methodTyp.ArgType, argv)
+	if replyv != nil {
+		reflectTypePools.Put(methodTyp.ReplyType, replyv)
+	}
+
+	if err != nil {
+		if replyv != nil {
+			var payload []byte
+			if payload, err = codec.Encode(replyv); err != nil {
+				return svr.handleError(res, err)
+			}
+			res.Payload = payload
+		}
+		return svr.handleError(res, err)
+	}
+
+	// 返回值reply->msg
+	if !req.IsOneway() {
+		var payload []byte
+		if payload, err = codec.Encode(replyv); err != nil {
+			return svr.handleError(res, err)
+		}
+		res.Payload = payload
+	}
+
+	return res, nil
 }
 
 // 读取请求
@@ -359,10 +435,10 @@ func (svr *Server) closeConn(conn net.Conn) error {
 }
 
 // rsp中添加错误信息
-func (svr *Server) handleError(res *protocol.Message, err error) {
+func (svr *Server) handleError(res *protocol.Message, err error) (*protocol.Message, error) {
 	res.SetMessageStatusType(protocol.Error)
 	res.Metadata[protocol.ServiceError] = err.Error()
-	return
+	return res, err
 }
 
 func (svr *Server) sendResponse(conn net.Conn, res *protocol.Message) {
@@ -376,5 +452,11 @@ func (svr *Server) sendResponse(conn net.Conn, res *protocol.Message) {
 // 校验请求
 func (svr *Server) auth(ctx context.Context, req *protocol.Message) error {
 	// todo 校验函数
+	return nil
+}
+
+// unregisters all services.
+func (svr *Server) UnregisterAll() error {
+	// todo plugin unregister service
 	return nil
 }

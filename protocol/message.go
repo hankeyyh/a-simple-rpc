@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"unsafe"
 )
 
@@ -273,7 +274,7 @@ func decodeMetadata(l uint32, data []byte) (map[string]string, error) {
 func (m *Message) Decode(r io.Reader) error {
 	defer func() {
 		if err := recover(); err != nil {
-			// todo 打印错误日志
+			log.Printf("panic in message decode: %v", err)
 		}
 	}()
 
