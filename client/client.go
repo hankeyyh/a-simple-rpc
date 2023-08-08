@@ -6,6 +6,12 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
+)
+
+const (
+	// ReaderBuffSize is used for bufio reader.
+	ReaderBuffSize = 16 * 1024
 )
 
 // 代表一次rpc调用
@@ -63,7 +69,56 @@ func NewClient(option Option) *Client {
 }
 
 func (c *Client) Connect(network, address string) error {
+	var conn net.Conn
+	var err error
+
+	switch network {
+	case "http":
+		// todo 建立http连接
+	default:
+		conn, err = newDirectConn(c, network, address)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	// 设置长连接
+	if tc, ok := conn.(*net.TCPConn); ok && c.option.TCPKeepAlivePeriod > 0 {
+		tc.SetKeepAlivePeriod(c.option.TCPKeepAlivePeriod)
+		tc.SetKeepAlive(true)
+	}
+
+	// 设置超时时间
+	if c.option.IdleTimeout != 0 {
+		conn.SetDeadline(time.Now().Add(c.option.IdleTimeout))
+	}
+
+	c.Conn = conn
+	c.r = bufio.NewReaderSize(conn, ReaderBuffSize)
+
+	// 开启goroutine接收返回消息
+	go c.input()
+
+	// 心跳
+	if c.option.Heartbeat && c.option.HeartbeatInterval > 0 {
+		go c.heartbeat()
+	}
+
 	return nil
+}
+
+// 接收返回消息
+func (c *Client) input() {
+	var err error
+
+	for err == nil {
+
+	}
+}
+
+func (c *Client) heartbeat() {
+
 }
 
 func (c *Client) Go(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}, done chan *Call) *Call {
