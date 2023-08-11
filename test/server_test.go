@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"github.com/hankeyyh/a-simple-rpc/server"
+	"github.com/hankeyyh/a-simple-rpc/test/proto"
 	"testing"
 )
 
@@ -17,8 +18,15 @@ type Reply struct {
 	C int
 }
 
-func (s *Arith) Add(ctx context.Context, args *Args, reply *Reply) error {
-	reply.C = args.A + args.B
+func (s *Arith) Add(ctx context.Context, args *proto.Args, reply *proto.Reply) error {
+	c := args.GetA() + args.GetB()
+	reply.C = &c
+	return nil
+}
+
+func (s *Arith) Mul(ctx context.Context, args *proto.Args, reply *proto.Reply) error {
+	c := args.GetA() * args.GetB()
+	reply.C = &c
 	return nil
 }
 

@@ -350,6 +350,7 @@ func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message) (re
 	servicePath := req.ServicePath
 	serviceMethod := req.ServiceMethod
 	res = req.Clone()
+	res.SetMessageType(protocol.Response)
 
 	// 对应的服务
 	svr.serviceMapLock.RLock()
@@ -376,6 +377,10 @@ func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message) (re
 		err = fmt.Errorf("can not find codec for %d", req.SerializeType())
 		return svr.handleError(res, err)
 	}
+	err = codec.Decode(req.Payload, argv)
+	if err != nil {
+		return svr.handleError(res, err)
+	}
 
 	// reply
 	replyv := reflectTypePools.Get(methodTyp.ReplyType)
@@ -389,14 +394,13 @@ func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message) (re
 
 	// 重新将argv, replyv 加入缓存
 	reflectTypePools.Put(methodTyp.ArgType, argv)
-	if replyv != nil {
-		reflectTypePools.Put(methodTyp.ReplyType, replyv)
-	}
 
 	if err != nil {
 		if replyv != nil {
 			var payload []byte
-			if payload, err = codec.Encode(replyv); err != nil {
+			payload, err = codec.Encode(replyv)
+			reflectTypePools.Put(methodTyp.ReplyType, replyv)
+			if err != nil {
 				return svr.handleError(res, err)
 			}
 			res.Payload = payload
@@ -407,10 +411,14 @@ func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message) (re
 	// 返回值reply->msg
 	if !req.IsOneway() {
 		var payload []byte
-		if payload, err = codec.Encode(replyv); err != nil {
+		payload, err = codec.Encode(replyv)
+		reflectTypePools.Put(methodTyp.ReplyType, replyv)
+		if err != nil {
 			return svr.handleError(res, err)
 		}
 		res.Payload = payload
+	} else if replyv != nil {
+		reflectTypePools.Put(methodTyp.ReplyType, replyv)
 	}
 
 	return res, nil

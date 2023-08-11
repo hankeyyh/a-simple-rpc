@@ -279,12 +279,16 @@ func (m *Message) Decode(r io.Reader) error {
 	}()
 
 	// header
-	_, err := io.ReadFull(r, m.Header[:])
+	_, err := io.ReadFull(r, m.Header[:1])
 	if err != nil {
 		return err
 	}
-	if m.Header.CheckMagicNumber() {
+	if !m.Header.CheckMagicNumber() {
 		return fmt.Errorf("wrong magic number: %v", m.Header[0])
+	}
+	_, err = io.ReadFull(r, m.Header[1:])
+	if err != nil {
+		return err
 	}
 
 	// total len
@@ -320,14 +324,14 @@ func (m *Message) Decode(r io.Reader) error {
 	n = nEnd
 
 	// service method
-	sml := binary.BigEndian.Uint32(data[n:4])
+	sml := binary.BigEndian.Uint32(data[n : n+4])
 	n += 4
 	nEnd = n + int(sml)
 	m.ServiceMethod = SliceByteToString(data[n:nEnd])
 	n = nEnd
 
 	// metadata
-	mdl := binary.BigEndian.Uint32(data[n:4])
+	mdl := binary.BigEndian.Uint32(data[n : n+4])
 	n += 4
 	nEnd = n + int(mdl)
 	if mdl > 0 {
@@ -339,7 +343,7 @@ func (m *Message) Decode(r io.Reader) error {
 	n = nEnd
 
 	// payload
-	pyl := binary.BigEndian.Uint32(data[n:4])
+	pyl := binary.BigEndian.Uint32(data[n : n+4])
 	n += 4
 	nEnd = n + int(pyl)
 	m.Payload = data[n:nEnd]

@@ -122,7 +122,34 @@ func (c *Client) input() {
 	var err error
 
 	for err == nil {
+		// byte->msg
+		msg := protocol.NewMessage()
+		err = msg.Decode(c.r)
+		if err != nil {
 
+		}
+
+		// msg->call
+		c.mutex.Lock()
+		call := c.pending[msg.Seq()]
+		c.mutex.Unlock()
+
+		codec := share.Codecs[msg.SerializeType()]
+		if codec == nil {
+			call.Error = ErrUnsupportedCodec
+			call.done()
+			continue
+		}
+		err = codec.Decode(msg.Payload, call.Reply)
+		if err != nil {
+			call.Error = err
+			call.done()
+			continue
+		}
+		call.ResMetadata = msg.Metadata
+
+		// call complete
+		call.done()
 	}
 }
 
@@ -246,8 +273,7 @@ func (c *Client) Call(ctx context.Context, servicePath, serviceMethod string, ar
 }
 
 func (c *Client) Close() error {
-	//TODO implement me
-	panic("implement me")
+	return c.Conn.Close()
 }
 
 func (c *Client) IsClosing() bool {
