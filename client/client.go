@@ -3,6 +3,9 @@ package client
 import (
 	"bufio"
 	"context"
+	"errors"
+	"github.com/hankeyyh/a-simple-rpc/protocol"
+	"github.com/hankeyyh/a-simple-rpc/share"
 	"log"
 	"net"
 	"sync"
@@ -12,6 +15,11 @@ import (
 const (
 	// ReaderBuffSize is used for bufio reader.
 	ReaderBuffSize = 16 * 1024
+)
+
+var (
+	ErrShutdown         = errors.New("connection is shut down")
+	ErrUnsupportedCodec = errors.New("unsupported codec")
 )
 
 // 代表一次rpc调用
@@ -63,7 +71,8 @@ type Client struct {
 
 func NewClient(option Option) *Client {
 	client := &Client{
-		option: option,
+		option:  option,
+		pending: make(map[uint64]*Call),
 	}
 	return client
 }
@@ -122,8 +131,94 @@ func (c *Client) heartbeat() {
 }
 
 func (c *Client) Go(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}, done chan *Call) *Call {
-	//TODO implement me
-	panic("implement me")
+	// 生成call
+	call := new(Call)
+	call.ServicePath = servicePath
+	call.ServiceMethod = serviceMethod
+	call.Args = args
+	call.Reply = reply
+
+	meta := ctx.Value(share.ReqMetaDataKey)
+	if meta != nil {
+		call.Metadata = meta.(map[string]string)
+	}
+
+	if done == nil {
+		done = make(chan *Call, 10)
+	} else {
+		if cap(done) == 0 {
+			log.Panic("rpc: done channel is unbuffered")
+		}
+	}
+	call.Done = done
+
+	go c.send(ctx, call)
+
+	return call
+}
+
+func (c *Client) send(ctx context.Context, call *Call) {
+	c.mutex.Lock()
+	// 客户端已经关闭
+	if c.shutdown || c.closing {
+		call.Error = ErrShutdown
+		call.done()
+		c.mutex.Unlock()
+		return
+	}
+
+	// 序列化方式错误
+	codec := share.Codecs[c.option.SerializeType]
+	if codec == nil {
+		call.Error = ErrUnsupportedCodec
+		call.done()
+		c.mutex.Unlock()
+		return
+	}
+
+	// 缓存call
+	seq := c.seq
+	c.seq++
+	c.pending[seq] = call
+
+	c.mutex.Unlock()
+
+	// call -> msg
+	msg := protocol.NewMessage()
+	msg.SetMessageType(protocol.Request)
+	msg.SetSerializeType(c.option.SerializeType)
+	msg.SetSeq(seq)
+	msg.ServicePath = call.ServicePath
+	msg.ServiceMethod = call.ServiceMethod
+	msg.Metadata = call.Metadata
+
+	payload, err := codec.Encode(call.Args)
+	if err != nil {
+		c.mutex.Lock()
+		delete(c.pending, seq)
+		c.mutex.Unlock()
+		call.Error = err
+		call.done()
+		return
+	}
+	msg.Payload = payload
+
+	msgRaw := msg.Encode()
+
+	// 发送消息
+	_, err = c.Conn.Write(msgRaw)
+	if err != nil {
+		c.mutex.Lock()
+		delete(c.pending, seq)
+		c.mutex.Unlock()
+		call.Error = err
+		call.done()
+		return
+	}
+
+	if c.option.IdleTimeout != 0 {
+		c.Conn.SetDeadline(time.Now().Add(c.option.IdleTimeout))
+	}
 }
 
 func (c *Client) GetConn() net.Conn {
@@ -132,8 +227,22 @@ func (c *Client) GetConn() net.Conn {
 }
 
 func (c *Client) Call(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}) error {
-	//TODO implement me
-	panic("implement me")
+	Done := c.Go(ctx, servicePath, serviceMethod, args, reply, make(chan *Call, 1)).Done
+
+	var err error
+	select {
+	case <-ctx.Done():
+		// 超时cancel
+		c.mutex.Lock()
+		// 删除call缓存
+		c.mutex.Unlock()
+
+	case call := <-Done:
+		// 调用完成
+		err = call.Error
+
+	}
+	return err
 }
 
 func (c *Client) Close() error {
