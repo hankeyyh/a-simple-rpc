@@ -327,10 +327,13 @@ func (svr *Server) processOneRequest(ctx context.Context, req *protocol.Message,
 
 	// 心跳请求，直接返回
 	if req.IsHeartbeat() {
-		res := req.Clone()
-		res.SetMessageType(protocol.Response)
-		res.Payload = protocol.StringToSliceByte("OK")
-		svr.sendResponse(conn, res)
+		log.Printf("recv heartbeat")
+		req.SetMessageType(protocol.Response)
+		data := req.Encode()
+		if svr.writeTimeout != 0 {
+			conn.SetWriteDeadline(time.Now().Add(svr.writeTimeout))
+		}
+		conn.Write(data)
 		return
 	}
 

@@ -12,7 +12,10 @@ import (
 
 func TestClient(t *testing.T) {
 	d, _ := client.NewPeer2PeerDiscovery("tcp@127.0.0.1:1234", "")
-	xclient := client.NewXClient("Arith", client.FailFast, client.RandomSelect, d, client.DefaultOption)
+	option := client.DefaultOption
+	option.Heartbeat = true
+	option.HeartbeatInterval = time.Second
+	xclient := client.NewXClient("Arith", client.FailFast, client.RandomSelect, d, option)
 	defer xclient.Close()
 
 	var a int32 = 2

@@ -283,6 +283,7 @@ func splitNetworkAndAddress(server string) (string, string) {
 // 关闭管理的所有连接
 func (x *xClient) Close() error {
 	x.mu.Lock()
+	x.isShutdown = true
 	for k, client := range x.cachedClient {
 		client.Close()
 		delete(x.cachedClient, k)

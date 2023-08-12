@@ -216,7 +216,35 @@ func (c *Client) input() {
 }
 
 func (c *Client) heartbeat() {
+	ticker := time.NewTicker(c.option.HeartbeatInterval)
+	if c.option.MaxWaitForHeartbeat == 0 {
+		c.option.MaxWaitForHeartbeat = 30 * time.Second
+	}
 
+	var err error
+	for range ticker.C {
+		if c.IsShutdown() || c.IsClosing() {
+			ticker.Stop()
+			return
+		}
+
+		args := time.Now().UnixNano()
+		reply := new(int64)
+		ctx, cancel := context.WithTimeout(context.Background(), c.option.MaxWaitForHeartbeat)
+		err = c.Call(ctx, "", "", args, reply)
+		cancel()
+		abnormal := false
+		if err != nil {
+			log.Printf("failed to hearbeat to %s: %v", c.Conn.RemoteAddr().String(), err)
+			abnormal = true
+		}
+		if *reply != args {
+			log.Printf("reply %d in heartbeat to %s is different from request %d", reply, c.Conn.RemoteAddr().String(), args)
+		}
+		if abnormal {
+			c.Close()
+		}
+	}
 }
 
 func (c *Client) Go(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}, done chan *Call) *Call {
@@ -255,9 +283,14 @@ func (c *Client) send(ctx context.Context, call *Call) {
 		c.mutex.Unlock()
 		return
 	}
+	isHeartBeat := call.ServicePath == "" && call.ServiceMethod == ""
 
 	// 序列化方式错误
-	codec := share.Codecs[c.option.SerializeType]
+	serializeType := c.option.SerializeType
+	if isHeartBeat {
+		serializeType = protocol.JSON
+	}
+	codec := share.Codecs[serializeType]
 	if codec == nil {
 		call.Error = ErrUnsupportedCodec
 		call.done()
@@ -279,11 +312,14 @@ func (c *Client) send(ctx context.Context, call *Call) {
 	// call -> msg
 	msg := protocol.NewMessage()
 	msg.SetMessageType(protocol.Request)
-	msg.SetSerializeType(c.option.SerializeType)
+	msg.SetSerializeType(serializeType)
 	msg.SetSeq(seq)
 	msg.ServicePath = call.ServicePath
 	msg.ServiceMethod = call.ServiceMethod
 	msg.Metadata = call.Metadata
+	if isHeartBeat {
+		msg.SetHeartbeat(true)
+	}
 
 	payload, err := codec.Encode(call.Args)
 	if err != nil {
