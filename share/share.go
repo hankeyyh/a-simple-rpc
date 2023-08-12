@@ -5,6 +5,9 @@ import (
 	"github.com/hankeyyh/a-simple-rpc/protocol"
 )
 
+// ctx缓存seq
+type SeqKey struct{}
+
 // ContextKey defines key type in context.
 type ContextKey string
 

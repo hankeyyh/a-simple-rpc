@@ -5,6 +5,7 @@ import (
 	"github.com/hankeyyh/a-simple-rpc/client"
 	"github.com/hankeyyh/a-simple-rpc/test/proto"
 	"log"
+	"sync"
 	"testing"
 	"time"
 )
@@ -22,12 +23,25 @@ func TestClient(t *testing.T) {
 	}
 
 	reply := &proto.Reply{}
-	err := xclient.Call(context.Background(), "Mul", args, reply)
-	if err != nil {
-		log.Fatalf("failed to call: %v", err)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		callMul(xclient, args, reply, 1)
+	}()
+	go func() {
+		callMul(xclient, args, reply, 2)
+	}()
+	wg.Wait()
+}
+
+func callMul(xclient client.XClient, args *proto.Args, reply *proto.Reply, i int) {
+	for {
+		err := xclient.Call(context.Background(), "Mul", args, reply)
+		if err != nil {
+			log.Fatalf("failed to call: %v", err)
+		}
+
+		log.Printf("[%d] %d * %d = %d", i, args.GetA(), args.GetB(), reply.GetC())
+		time.Sleep(1e9)
 	}
-
-	log.Printf("%d * %d = %d", args.GetA(), args.GetB(), reply.GetC())
-	time.Sleep(1e9)
-
 }

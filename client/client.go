@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"github.com/hankeyyh/a-simple-rpc/protocol"
 	"github.com/hankeyyh/a-simple-rpc/share"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -18,8 +20,9 @@ const (
 )
 
 var (
-	ErrShutdown         = errors.New("connection is shut down")
-	ErrUnsupportedCodec = errors.New("unsupported codec")
+	ErrShutdown                 = errors.New("connection is shut down")
+	ErrUnsupportedCodec         = errors.New("unsupported codec")
+	ErrUnsupportedMsgStatusType = errors.New("unsupported msg status type")
 )
 
 // 代表一次rpc调用
@@ -126,30 +129,89 @@ func (c *Client) input() {
 		msg := protocol.NewMessage()
 		err = msg.Decode(c.r)
 		if err != nil {
-
+			break
 		}
 
 		// msg->call
 		c.mutex.Lock()
 		call := c.pending[msg.Seq()]
+		delete(c.pending, msg.Seq())
 		c.mutex.Unlock()
 
-		codec := share.Codecs[msg.SerializeType()]
-		if codec == nil {
-			call.Error = ErrUnsupportedCodec
-			call.done()
+		// 可能call已经超时，已经被移除
+		if call == nil {
 			continue
 		}
-		err = codec.Decode(msg.Payload, call.Reply)
-		if err != nil {
-			call.Error = err
+
+		// svr返回错误
+		if msg.MessageStatusType() == protocol.Error {
+			// 错误
+			if len(msg.Metadata) > 0 {
+				call.ResMetadata = msg.Metadata
+				call.Error = NewServiceError(msg.Metadata[protocol.ServiceError])
+			}
+			// payload
+			if len(msg.Payload) > 0 {
+				codec := share.Codecs[msg.SerializeType()]
+				if codec != nil {
+					_ = codec.Decode(msg.Payload, call.Reply)
+				}
+			}
 			call.done()
 			continue
+		} else if msg.MessageStatusType() == protocol.Normal {
+			// metadata
+			if len(msg.Metadata) > 0 {
+				call.ResMetadata = msg.Metadata
+			}
+			// payload
+			if len(msg.Payload) > 0 {
+				codec := share.Codecs[msg.SerializeType()]
+				if codec == nil {
+					call.Error = NewServiceError(ErrUnsupportedCodec.Error())
+				} else {
+					err = codec.Decode(msg.Payload, call.Reply)
+					if err != nil {
+						call.Error = NewServiceError(err.Error())
+					}
+				}
+			}
+		} else {
+			// msg状态无法识别
+			call.Error = NewServiceError(ErrUnsupportedMsgStatusType.Error())
 		}
-		call.ResMetadata = msg.Metadata
 
 		// call complete
 		call.done()
+	}
+
+	// 出现异常，关闭所有pending call
+	c.mutex.Lock()
+	c.Conn.Close()
+	c.shutdown = true
+	if e, ok := err.(*net.OpError); ok {
+		if e.Addr != nil || e.Err != nil {
+			err = fmt.Errorf("net.Operror: %s", e.Err.Error())
+		} else {
+			err = errors.New("net.OpError")
+		}
+	}
+	if err == io.EOF {
+		if c.closing {
+			err = ErrShutdown
+		} else {
+			err = io.ErrUnexpectedEOF
+		}
+	}
+	for _, call := range c.pending {
+		call.Error = err
+		call.done()
+	}
+	c.mutex.Unlock()
+
+	// 未知错误
+	if err != nil && !c.closing {
+		log.Printf("client protocol error: %v", err)
 	}
 }
 
@@ -207,8 +269,12 @@ func (c *Client) send(ctx context.Context, call *Call) {
 	seq := c.seq
 	c.seq++
 	c.pending[seq] = call
-
 	c.mutex.Unlock()
+
+	// 缓存seq
+	if cseq, ok := ctx.Value(share.SeqKey{}).(*uint64); ok {
+		*cseq = seq
+	}
 
 	// call -> msg
 	msg := protocol.NewMessage()
@@ -249,21 +315,28 @@ func (c *Client) send(ctx context.Context, call *Call) {
 }
 
 func (c *Client) GetConn() net.Conn {
-	//TODO implement me
-	panic("implement me")
+	return c.Conn
 }
 
 func (c *Client) Call(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}) error {
+	// ctx 缓存seq，当ctx被cancel时，需要根据seq删除pending call
+	seq := new(uint64)
+	ctx = context.WithValue(ctx, share.SeqKey{}, seq)
+
 	Done := c.Go(ctx, servicePath, serviceMethod, args, reply, make(chan *Call, 1)).Done
 
 	var err error
 	select {
 	case <-ctx.Done():
-		// 超时cancel
 		c.mutex.Lock()
-		// 删除call缓存
+		call := c.pending[*seq]
+		delete(c.pending, *seq)
 		c.mutex.Unlock()
-
+		if call != nil {
+			call.Error = ctx.Err()
+			call.done()
+		}
+		return ctx.Err()
 	case call := <-Done:
 		// 调用完成
 		err = call.Error
@@ -273,15 +346,33 @@ func (c *Client) Call(ctx context.Context, servicePath, serviceMethod string, ar
 }
 
 func (c *Client) Close() error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// 缓存的call强制关闭
+	for i, call := range c.pending {
+		delete(c.pending, i)
+		if call != nil {
+			call.Error = ErrShutdown
+			call.done()
+		}
+	}
+	if c.closing || c.shutdown {
+		return ErrShutdown
+	}
+
+	c.closing = true
 	return c.Conn.Close()
 }
 
 func (c *Client) IsClosing() bool {
-	//TODO implement me
-	panic("implement me")
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.closing
 }
 
 func (c *Client) IsShutdown() bool {
-	//TODO implement me
-	panic("implement me")
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.shutdown
 }
