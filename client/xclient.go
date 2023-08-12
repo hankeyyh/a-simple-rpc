@@ -189,13 +189,13 @@ func (x *xClient) getCachedClient(k string) (RPCClient, error) {
 			return client, nil
 		}
 		// client 已关闭状态，从缓存中移除
-		x.removeClient(k, client)
+		delete(x.cachedClient, k)
 		client = nil
 	}
 	x.mu.Unlock()
 
 	// 创建新的client
-	if client == nil {
+	if client == nil || client.IsShutdown() {
 		// 生成client，避免并发导致多次生成
 		generatedClient, err, _ := x.slGroup.Do(k, func() (interface{}, error) {
 			return x.generateClient(k)

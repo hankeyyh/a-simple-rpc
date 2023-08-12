@@ -138,7 +138,6 @@ func (c *Client) input() {
 		delete(c.pending, msg.Seq())
 		c.mutex.Unlock()
 
-		// 可能call已经超时，已经被移除
 		if call == nil {
 			continue
 		}
@@ -229,22 +228,54 @@ func (c *Client) heartbeat() {
 		}
 
 		args := time.Now().UnixNano()
-		reply := new(int64)
+		reply := int64(0)
 		ctx, cancel := context.WithTimeout(context.Background(), c.option.MaxWaitForHeartbeat)
-		err = c.Call(ctx, "", "", args, reply)
-		cancel()
+		err = c.Call(ctx, "", "", &args, &reply)
 		abnormal := false
+		if ctx.Err() != nil {
+			log.Printf("failed to heartbeat to %s, context err: %v", c.Conn.RemoteAddr().String(), ctx.Err())
+			abnormal = true
+		}
+		cancel()
 		if err != nil {
 			log.Printf("failed to hearbeat to %s: %v", c.Conn.RemoteAddr().String(), err)
 			abnormal = true
 		}
-		if *reply != args {
+		if reply != args {
 			log.Printf("reply %d in heartbeat to %s is different from request %d", reply, c.Conn.RemoteAddr().String(), args)
 		}
 		if abnormal {
 			c.Close()
 		}
 	}
+}
+
+func (c *Client) Call(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}) error {
+	// ctx 缓存seq，当ctx被cancel时，需要根据seq删除pending call
+	seq := new(uint64)
+	ctx = context.WithValue(ctx, share.SeqKey{}, seq)
+
+	Done := c.Go(ctx, servicePath, serviceMethod, args, reply, make(chan *Call, 1)).Done
+
+	var err error
+	select {
+	case <-ctx.Done():
+		// 被cancel
+		c.mutex.Lock()
+		call := c.pending[*seq]
+		delete(c.pending, *seq)
+		c.mutex.Unlock()
+		if call != nil {
+			call.Error = ctx.Err()
+			call.done()
+		}
+		return ctx.Err()
+	case call := <-Done:
+		// 调用完成
+		err = call.Error
+
+	}
+	return err
 }
 
 func (c *Client) Go(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}, done chan *Call) *Call {
@@ -352,33 +383,6 @@ func (c *Client) send(ctx context.Context, call *Call) {
 
 func (c *Client) GetConn() net.Conn {
 	return c.Conn
-}
-
-func (c *Client) Call(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}) error {
-	// ctx 缓存seq，当ctx被cancel时，需要根据seq删除pending call
-	seq := new(uint64)
-	ctx = context.WithValue(ctx, share.SeqKey{}, seq)
-
-	Done := c.Go(ctx, servicePath, serviceMethod, args, reply, make(chan *Call, 1)).Done
-
-	var err error
-	select {
-	case <-ctx.Done():
-		c.mutex.Lock()
-		call := c.pending[*seq]
-		delete(c.pending, *seq)
-		c.mutex.Unlock()
-		if call != nil {
-			call.Error = ctx.Err()
-			call.done()
-		}
-		return ctx.Err()
-	case call := <-Done:
-		// 调用完成
-		err = call.Error
-
-	}
-	return err
 }
 
 func (c *Client) Close() error {
