@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -71,6 +72,10 @@ type Server struct {
 
 	// 正在处理的请求数量
 	handlerMsgNum int32
+
+	// http server
+	DisableHTTPGateway bool // 禁用http请求/响应
+	gatewayHTTPServer  *http.Server
 }
 
 type OptionFn func(s *Server)
@@ -186,6 +191,9 @@ func (svr *Server) Serve(network, address string) error {
 	}
 
 	defer svr.UnregisterAll()
+
+	// 启动gateway，支持http请求响应模型
+	ln = svr.startGateway(network, ln)
 
 	return svr.serveListener(ln)
 }

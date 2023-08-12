@@ -11,3 +11,9 @@ message Args {
 message Reply {
   optional int32 C = 1;
 }
+
+service Arith {
+    rpc Mul(Args) returns (Reply) {
+
+    }
+}

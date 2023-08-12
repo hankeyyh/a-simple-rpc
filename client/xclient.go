@@ -91,7 +91,7 @@ func (x *xClient) Call(ctx context.Context, serviceMethod string, args interface
 		return ErrXClientShutdown
 	}
 
-	// todo 设置请求超时时间
+	// todo 设置svr处理超时时间
 
 	// 选择client
 	k, client, err := x.selectClient(ctx, x.servicePath, serviceMethod, args)

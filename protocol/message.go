@@ -17,7 +17,7 @@ type (
 )
 
 const (
-	magicNumber byte = 0x08
+	MagicNumber byte = 0x08
 )
 
 // 消息类型
@@ -72,7 +72,7 @@ type Message struct {
 
 func NewMessage() *Message {
 	header := Header{}
-	header[0] = magicNumber
+	header[0] = MagicNumber
 
 	return &Message{
 		Header: &header,
@@ -83,7 +83,7 @@ type Header [12]byte
 
 // CheckMagicNumber checks whether header starts rpcx magic number.
 func (h Header) CheckMagicNumber() bool {
-	return h[0] == magicNumber
+	return h[0] == MagicNumber
 }
 
 // Version returns version of rpcx protocol.
