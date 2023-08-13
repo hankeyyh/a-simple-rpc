@@ -453,6 +453,34 @@ func (svr *Server) closeConn(conn net.Conn) error {
 	return conn.Close()
 }
 
+// 立即关闭
+func (svr *Server) Close() error {
+	svr.mu.Lock()
+	defer svr.mu.Unlock()
+
+	var err error
+	// 关闭listener
+	if svr.ln != nil {
+		err = svr.ln.Close()
+	}
+	for c := range svr.actionConnMap {
+		c.Close()
+		delete(svr.actionConnMap, c)
+	}
+	svr.closeDoneChanLocked()
+
+	return err
+}
+
+func (svr *Server) closeDoneChanLocked() {
+	select {
+	case <-svr.doneChan:
+		// already closed
+	default:
+		close(svr.doneChan)
+	}
+}
+
 // rsp中添加错误信息
 func (svr *Server) handleError(res *protocol.Message, err error) (*protocol.Message, error) {
 	res.SetMessageStatusType(protocol.Error)

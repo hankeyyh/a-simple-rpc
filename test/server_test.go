@@ -32,6 +32,8 @@ func (s *Arith) Mul(ctx context.Context, args *proto.Args, reply *proto.Reply) e
 
 func TestServer(t *testing.T) {
 	svr := server.NewServer()
+	defer svr.Close()
+
 	svr.Register(new(Arith))
 	svr.Serve("tcp", "127.0.0.1:1234")
 }
