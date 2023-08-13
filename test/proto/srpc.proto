@@ -1,0 +1,16 @@
+syntax = "proto3";
+package srpc;
+
+option go_package = "./proto";
+
+// 服务选项与方法选项扩展定义
+import "google/protobuf/descriptor.proto";
+
+message HttpRouteOptions {
+  optional string get = 1;  // get path
+  optional string post = 2; // post path
+}
+
+extend google.protobuf.MethodOptions {
+  optional HttpRouteOptions method_option_http_api = 10003;
+}
