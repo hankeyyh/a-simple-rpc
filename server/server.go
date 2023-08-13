@@ -355,6 +355,16 @@ func (svr *Server) processOneRequest(ctx context.Context, req *protocol.Message,
 	}
 }
 
+func (svr *Server) getService(servicePath string) (*service, error) {
+	svr.serviceMapLock.RLock()
+	svc := svr.serviceMap[servicePath]
+	svr.serviceMapLock.RUnlock()
+	if svr == nil {
+		return nil, errors.New("can't find service " + servicePath)
+	}
+	return svc, nil
+}
+
 // 处理请求
 func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message) (res *protocol.Message, err error) {
 	// 请求服务，方法
@@ -364,11 +374,8 @@ func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message) (re
 	res.SetMessageType(protocol.Response)
 
 	// 对应的服务
-	svr.serviceMapLock.RLock()
-	svc := svr.serviceMap[servicePath]
-	svr.serviceMapLock.RUnlock()
-	if svc == nil {
-		err = errors.New("can't find service " + servicePath)
+	svc, err := svr.getService(servicePath)
+	if err != nil {
 		return svr.handleError(res, err)
 	}
 

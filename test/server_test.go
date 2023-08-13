@@ -10,12 +10,12 @@ import (
 type Arith int
 
 type Args struct {
-	A int
-	B int
+	A int `json:"A"`
+	B int `json:"B"`
 }
 
 type Reply struct {
-	C int
+	C int `json:"C"`
 }
 
 func (s *Arith) Add(ctx context.Context, args *proto.Args, reply *proto.Reply) error {

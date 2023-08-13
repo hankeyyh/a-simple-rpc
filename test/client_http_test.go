@@ -2,8 +2,7 @@ package test
 
 import (
 	"bytes"
-	"github.com/hankeyyh/a-simple-rpc/codec"
-	"github.com/hankeyyh/a-simple-rpc/test/proto"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -25,18 +24,15 @@ const (
 )
 
 func TestClientHttp(t *testing.T) {
-	cc := &codec.PBCodec{}
-
-	var a int32 = 10
-	var b int32 = 20
-
-	args := &proto.Args{
-		A: &a,
-		B: &b,
+	args := Args{
+		A: 10,
+		B: 20,
 	}
-	data, _ := cc.Encode(args)
-
-	req, err := http.NewRequest("GET", "http://127.0.0.1:1234", bytes.NewBuffer(data))
+	body, err := json.Marshal(args)
+	if err != nil {
+		log.Fatal("failed to json marshal: ", err)
+	}
+	req, err := http.NewRequest("GET", "http://127.0.0.1:1234", bytes.NewBuffer(body))
 	if err != nil {
 		log.Fatal("failed to create request: ", err)
 	}
@@ -46,6 +42,7 @@ func TestClientHttp(t *testing.T) {
 	h.Set(XSerializeType, "2") // json
 	h.Set(XServicePath, "Arith")
 	h.Set(XServiceMethod, "Mul")
+	h.Set("content-type", "application/json")
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -59,10 +56,10 @@ func TestClientHttp(t *testing.T) {
 	} else if len(replyData) == 0 {
 		log.Fatal("reply is empty")
 	}
-	reply := proto.Reply{}
-	err = cc.Decode(replyData, &reply)
+	reply := Reply{}
+	err = json.Unmarshal(replyData, &reply)
 	if err != nil {
-		log.Fatal("failed to decode reply: ", err)
+		log.Fatal("failed to json unmarshal: ", err)
 	}
-	log.Printf("%d * %d = %d", *args.A, *args.B, *reply.C)
+	log.Printf("%d * %d = %d", args.A, args.B, reply.C)
 }

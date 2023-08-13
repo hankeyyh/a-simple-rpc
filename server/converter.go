@@ -2,7 +2,6 @@ package server
 
 import (
 	"github.com/hankeyyh/a-simple-rpc/protocol"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -23,7 +22,7 @@ const (
 )
 
 // http请求转为自定义rpc请求
-func HttpRequest2RpcxRequest(r *http.Request) (*protocol.Message, error) {
+func HttpRequest2RpcxRequest(r *http.Request, payload []byte) (*protocol.Message, error) {
 	req := protocol.NewMessage()
 	req.SetMessageType(protocol.Request)
 
@@ -81,10 +80,6 @@ func HttpRequest2RpcxRequest(r *http.Request) (*protocol.Message, error) {
 	req.ServiceMethod = h.Get(XServiceMethod)
 
 	// payload
-	payload, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, err
-	}
 	req.Payload = payload
 
 	return req, nil

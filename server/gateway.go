@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/hankeyyh/a-simple-rpc/protocol"
 	"github.com/hankeyyh/a-simple-rpc/share"
@@ -12,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -78,44 +80,74 @@ func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, 
 		servicePath = strings.TrimPrefix(servicePath, "/")
 		r.Header.Set(XServicePath, servicePath)
 	}
-	servicePath := r.Header.Get(XServicePath)
-
-	// http 请求转rpc请求
-	reqMsg, err := HttpRequest2RpcxRequest(r)
 
 	// response header
 	wh := w.Header()
-	wh.Set(XVersion, r.Header.Get(XVersion))
-	wh.Set(XMessageID, r.Header.Get(XMessageID))
-	if err == nil && servicePath == "" {
+	var err error
+	servicePath := r.Header.Get(XServicePath)
+	if servicePath == "" {
 		err = errors.New("empty servicepath")
 	} else {
 		wh.Set(XServicePath, servicePath)
 	}
-
-	if err == nil && r.Header.Get(XServiceMethod) == "" {
+	serviceMethod := r.Header.Get(XServiceMethod)
+	if serviceMethod == "" {
 		err = errors.New("empty servicemethod")
 	} else {
-		wh.Set(XServiceMethod, r.Header.Get(XServiceMethod))
+		wh.Set(XServiceMethod, serviceMethod)
 	}
-
-	if err == nil && r.Header.Get(XSerializeType) == "" {
-		err = errors.New("empty serialized type")
+	serializeType := r.Header.Get(XSerializeType)
+	if serializeType == "" {
+		err = errors.New("empty serialize type")
 	} else {
-		wh.Set(XSerializeType, r.Header.Get(XSerializeType))
+		wh.Set(XSerializeType, serializeType)
+	}
+	wh.Set(XVersion, r.Header.Get(XVersion))
+	wh.Set(XMessageID, r.Header.Get(XMessageID))
+	wh.Set("content-type", "application/json")
+
+	// request header中必填字段丢失
+	if err != nil {
+		writeErrHeader(w, &wh, 403, err)
+		return
 	}
 
-	// 请求格式有问题
+	svc, err := svr.getService(servicePath)
 	if err != nil {
-		rh := r.Header
-		for k, v := range rh {
-			if strings.HasPrefix(k, "X-SIMPLE-") && len(v) > 0 {
-				wh.Set(k, v[0])
-			}
-		}
-		wh.Set(XMessageStatusType, "Error")
-		wh.Set(XErrorMessage, err.Error())
-		w.WriteHeader(403)
+		writeErrHeader(w, &wh, 403, err)
+		return
+	}
+	mtype, ok := svc.methodMap[serviceMethod]
+	if !ok {
+		err = errors.New("can't find method " + serviceMethod)
+		writeErrHeader(w, &wh, 403, err)
+		return
+	}
+
+	// byte->json body/pb
+	var argv = reflectTypePools.Get(mtype.ArgType)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeErrHeader(w, &wh, 403, err)
+		return
+	}
+	if err = json.Unmarshal(body, &argv); err != nil {
+		writeErrHeader(w, &wh, 403, err)
+		return
+	}
+	// pb->byte
+	st, _ := strconv.Atoi(serializeType)
+	codec := share.Codecs[protocol.SerializeType(st)]
+	payload, err := codec.Encode(argv)
+	if err != nil {
+		writeErrHeader(w, &wh, 403, err)
+		return
+	}
+
+	// http 请求转rpc请求
+	reqMsg, err := HttpRequest2RpcxRequest(r, payload)
+	if err != nil {
+		writeErrHeader(w, &wh, 403, err)
 		return
 	}
 
@@ -125,12 +157,34 @@ func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, 
 	ctx = context.WithValue(ctx, share.ReqMetaDataKey, reqMsg.Metadata)
 	ctx = context.WithValue(ctx, share.ResMetaDataKey, resMetadata)
 
+	// 处理请求
 	resMsg, err := svr.handleRequest(ctx, reqMsg)
 	if err != nil {
-		wh.Set(XMessageStatusType, "Error")
-		wh.Set(XErrorMessage, err.Error())
-		w.WriteHeader(500)
+		writeErrHeader(w, &wh, 500, err)
 		return
+	}
+	reflectTypePools.Put(mtype.ArgType, argv)
+
+	// byte->pb/json body->byte
+	replyv := reflectTypePools.Get(mtype.ReplyType)
+	err = codec.Decode(resMsg.Payload, replyv)
+	if err != nil {
+		if replyv != nil {
+			reflectTypePools.Put(mtype.ReplyType, replyv)
+		}
+		writeErrHeader(w, &wh, 500, err)
+		return
+	}
+	body, err = json.Marshal(replyv)
+	if err != nil {
+		if replyv != nil {
+			reflectTypePools.Put(mtype.ReplyType, replyv)
+		}
+		writeErrHeader(w, &wh, 500, err)
+		return
+	}
+	if replyv != nil {
+		reflectTypePools.Put(mtype.ReplyType, replyv)
 	}
 
 	// response metadata 写入header
@@ -140,6 +194,13 @@ func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, 
 	}
 	wh.Set(XMeta, meta.Encode())
 
-	// payload 作为body返回，metadata，servicePath，serviceMethod已写在header中
-	w.Write(resMsg.Payload)
+	// 返回body，metadata，servicePath，serviceMethod已写在header中
+	w.Write(body)
+}
+
+// header写入错误信息
+func writeErrHeader(w http.ResponseWriter, wh *http.Header, code int, err error) {
+	wh.Set(XMessageStatusType, "Error")
+	wh.Set(XErrorMessage, err.Error())
+	w.WriteHeader(code)
 }
