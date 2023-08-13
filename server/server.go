@@ -463,10 +463,16 @@ func (svr *Server) Close() error {
 	if svr.ln != nil {
 		err = svr.ln.Close()
 	}
+	// 关闭conn
 	for c := range svr.actionConnMap {
 		c.Close()
 		delete(svr.actionConnMap, c)
 	}
+	// 关闭http gateway
+	if svr.gatewayHTTPServer != nil {
+		svr.gatewayHTTPServer.Close()
+	}
+	// 关闭done chan
 	svr.closeDoneChanLocked()
 
 	return err

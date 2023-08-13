@@ -36,7 +36,7 @@ func TestMultiClient(t *testing.T) {
 	option := client.DefaultOption
 	option.Heartbeat = true
 	option.HeartbeatInterval = time.Second
-	option.IdleTimeout = time.Second
+	option.IdleTimeout = time.Second * 2
 	xclient := client.NewXClient("Arith", client.FailTry, client.RandomSelect, d, option)
 	defer xclient.Close()
 
@@ -65,7 +65,6 @@ func callMul(xclient client.XClient, args *proto.Args, reply *proto.Reply, i int
 		if err != nil {
 			log.Fatalf("failed to call: %v", err)
 		}
-		log.Printf("err is nil")
 
 		log.Printf("[%d] %d * %d = %d", i, args.GetA(), args.GetB(), reply.GetC())
 		time.Sleep(time.Second)
