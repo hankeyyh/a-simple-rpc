@@ -23,6 +23,15 @@ const (
 	XErrorMessage      = "X-SIMPLE-ErrorMessage"
 )
 
+type Args struct {
+	A int `json:"A"`
+	B int `json:"B"`
+}
+
+type Reply struct {
+	C int `json:"C"`
+}
+
 func TestClientHttp(t *testing.T) {
 	args := Args{
 		A: 10,

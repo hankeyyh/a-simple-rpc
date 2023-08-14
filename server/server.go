@@ -95,13 +95,21 @@ func NewServer(options ...OptionFn) *Server {
 }
 
 func (svr *Server) Register(serviceInstance interface{}) error {
+	return svr.RegisterName("", serviceInstance)
+}
+
+func (svr *Server) RegisterName(serviceName string, serviceInstance interface{}) error {
 	svr.serviceMapLock.Lock()
 	defer svr.serviceMapLock.Unlock()
 
 	service := new(service)
 	service.instanceType = reflect.TypeOf(serviceInstance)
 	service.instance = reflect.ValueOf(serviceInstance)
-	service.name = reflect.Indirect(service.instance).Type().Name()
+	sname := reflect.Indirect(service.instance).Type().Name()
+	if serviceName != "" {
+		sname = serviceName
+	}
+	service.name = sname
 
 	// 注册合法的方法
 	validMethodMap := suitableRPCMethods(service.instanceType)
@@ -359,7 +367,7 @@ func (svr *Server) getService(servicePath string) (*service, error) {
 	svr.serviceMapLock.RLock()
 	svc := svr.serviceMap[servicePath]
 	svr.serviceMapLock.RUnlock()
-	if svr == nil {
+	if svc == nil {
 		return nil, errors.New("can't find service " + servicePath)
 	}
 	return svc, nil

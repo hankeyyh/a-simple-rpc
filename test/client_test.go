@@ -15,7 +15,7 @@ func TestClient(t *testing.T) {
 	option := client.DefaultOption
 	option.Heartbeat = true
 	option.HeartbeatInterval = time.Second
-	option.IdleTimeout = time.Second * 2
+	//option.IdleTimeout = time.Second * 2
 	xclient := client.NewXClient("Arith", client.FailFast, client.RandomSelect, d, option)
 	defer xclient.Close()
 

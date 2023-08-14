@@ -75,7 +75,8 @@ func NewMessage() *Message {
 	header[0] = MagicNumber
 
 	return &Message{
-		Header: &header,
+		Header:   &header,
+		Metadata: make(map[string]string),
 	}
 }
 
