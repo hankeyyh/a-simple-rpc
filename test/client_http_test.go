@@ -41,16 +41,14 @@ func TestClientHttp(t *testing.T) {
 	if err != nil {
 		log.Fatal("failed to json marshal: ", err)
 	}
-	req, err := http.NewRequest("GET", "http://127.0.0.1:1234", bytes.NewBuffer(body))
+	req, err := http.NewRequest("GET", "http://127.0.0.1:1234/arith/mul", bytes.NewBuffer(body))
 	if err != nil {
 		log.Fatal("failed to create request: ", err)
 	}
 	h := req.Header
 	h.Set(XMessageID, "10000")
 	h.Set(XMessageType, "0")
-	h.Set(XSerializeType, "2") // json
-	h.Set(XServicePath, "Arith")
-	h.Set(XServiceMethod, "Mul")
+	h.Set(XSerializeType, "2")
 	h.Set("content-type", "application/json")
 
 	res, err := http.DefaultClient.Do(req)

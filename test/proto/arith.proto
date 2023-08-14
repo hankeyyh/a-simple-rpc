@@ -3,9 +3,6 @@ package arith;
 
 option go_package = "./proto";
 
-import "srpc.proto";
-
-
 message Args {
   optional int32 A = 1;
   optional int32 B = 2;
@@ -16,9 +13,5 @@ message Reply {
 }
 
 service Arith {
-    rpc Mul(Args) returns (Reply) {
-      option (srpc.method_option_http_api) = {
-        post: "/mul"
-      };
-    }
+    rpc Mul(Args) returns (Reply) {}
 }

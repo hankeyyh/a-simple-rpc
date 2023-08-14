@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/hankeyyh/a-simple-rpc/protocol"
 	"github.com/hankeyyh/a-simple-rpc/share"
+	"github.com/iancoleman/strcase"
 	"github.com/julienschmidt/httprouter"
 	"github.com/soheilhy/cmux"
 	"io"
@@ -73,27 +74,31 @@ func (svr *Server) startHTTP1APIGateway(ln net.Listener) {
 func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	// 缓存远端地址，这里RemoteAddr是string，而不是conn
 	ctx := context.WithValue(context.Background(), RemoteConnContexKey, r.RemoteAddr)
+	var err error
 
-	// 防止servicePath为空
-	if r.Header.Get(XServicePath) == "" {
-		servicePath := params.ByName("servicePath")
-		servicePath = strings.TrimPrefix(servicePath, "/")
-		r.Header.Set(XServicePath, servicePath)
-	}
+	// 解析路径
+	paths := strings.Split(r.URL.Path, "/")
 
 	// response header
 	wh := w.Header()
-	var err error
-	servicePath := r.Header.Get(XServicePath)
+	if len(paths) > 3 {
+		err = errors.New("path must be consist of service and method name")
+		writeErrHeader(w, &wh, 403, err)
+		return
+	}
+	servicePath := strcase.ToCamel(paths[1])
+	serviceMethod := strcase.ToCamel(paths[2])
+
 	if servicePath == "" {
 		err = errors.New("empty servicepath")
 	} else {
+		r.Header.Set(XServicePath, servicePath)
 		wh.Set(XServicePath, servicePath)
 	}
-	serviceMethod := r.Header.Get(XServiceMethod)
 	if serviceMethod == "" {
 		err = errors.New("empty servicemethod")
 	} else {
+		r.Header.Set(XServiceMethod, serviceMethod)
 		wh.Set(XServiceMethod, serviceMethod)
 	}
 	serializeType := r.Header.Get(XSerializeType)
