@@ -15,11 +15,10 @@ type methodType struct {
 }
 
 type service struct {
-	name          string
-	instance      reflect.Value // receiver of methods for the service
-	instanceType  reflect.Type  // type of the receiver
-	methodMap     map[string]*methodType
-	httpMethodMap map[string]*methodType // [url]method
+	name         string
+	instance     reflect.Value // receiver of methods for the service
+	instanceType reflect.Type  // type of the receiver
+	methodMap    map[string]*methodType
 }
 
 func (s *service) call(ctx context.Context, mtype *methodType, argv, replyv reflect.Value) error {

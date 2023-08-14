@@ -5,19 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/hankeyyh/a-simple-rpc/protocol"
 	"github.com/hankeyyh/a-simple-rpc/share"
-	"github.com/hankeyyh/simpleproto"
 	"github.com/soheilhy/cmux"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,7 +60,6 @@ type Server struct {
 
 	// service map， 锁
 	serviceMap     map[string]*service
-	httpServiceMap map[string]*service
 	serviceMapLock sync.RWMutex
 
 	// 活跃连接缓存，锁
@@ -88,10 +82,9 @@ type OptionFn func(s *Server)
 
 func NewServer(options ...OptionFn) *Server {
 	s := &Server{
-		serviceMap:     make(map[string]*service),
-		httpServiceMap: make(map[string]*service),
-		actionConnMap:  make(map[net.Conn]interface{}),
-		doneChan:       make(chan struct{}),
+		serviceMap:    make(map[string]*service),
+		actionConnMap: make(map[net.Conn]interface{}),
+		doneChan:      make(chan struct{}),
 	}
 
 	for _, fn := range options {
@@ -101,11 +94,11 @@ func NewServer(options ...OptionFn) *Server {
 	return s
 }
 
-func (svr *Server) Register(serviceInstance interface{}, sd *protoreflect.ServiceDescriptor) error {
-	return svr.RegisterName("", serviceInstance, sd)
+func (svr *Server) Register(serviceInstance interface{}) error {
+	return svr.RegisterName("", serviceInstance)
 }
 
-func (svr *Server) RegisterName(serviceName string, serviceInstance interface{}, sd *protoreflect.ServiceDescriptor) error {
+func (svr *Server) RegisterName(serviceName string, serviceInstance interface{}) error {
 	svr.serviceMapLock.Lock()
 	defer svr.serviceMapLock.Unlock()
 
@@ -118,33 +111,15 @@ func (svr *Server) RegisterName(serviceName string, serviceInstance interface{},
 	}
 	service.name = sname
 
-	// http方法和路由
-	methodPath := make(map[string]string)
-	if sd != nil {
-		for i := 0; i < (*sd).Methods().Len(); i++ {
-			mname := (*sd).Methods().Get(i).Name()
-			md := (*sd).Methods().Get(i)
-			op, ok := md.Options().(*descriptor.MethodOptions)
-			if ok {
-				ext := proto.GetExtension(op, simpleproto.E_MethodOptionHttpApi).(*simpleproto.HttpRouteOptions)
-				path := ext.GetPath()
-				methodPath[string(mname)] = path
-			}
-		}
-	}
-
 	// 注册合法的方法
-	validMethodMap, validHttpMethodMap := suitableMethods(service.instanceType, methodPath)
+	validMethodMap := suitableRPCMethods(service.instanceType)
 	if len(validMethodMap) == 0 {
 		return errors.New("register: type " + service.name + " has no exported methods of suitable type")
 	}
 	service.methodMap = validMethodMap
-	service.httpMethodMap = validHttpMethodMap
 
 	svr.serviceMap[service.name] = service
-	if len(service.httpMethodMap) > 0 {
-		svr.httpServiceMap["/"+strings.ToLower(service.name)] = service
-	}
+
 	return nil
 }
 
@@ -160,9 +135,8 @@ func isExportedOrBuiltinType(t reflect.Type) bool {
 	return t.PkgPath() == "" || isExported(t.Name())
 }
 
-func suitableMethods(typ reflect.Type, methodPathMap map[string]string) (map[string]*methodType, map[string]*methodType) {
+func suitableRPCMethods(typ reflect.Type) map[string]*methodType {
 	methodMap := make(map[string]*methodType)
-	httpMethodMap := make(map[string]*methodType)
 
 	for i := 0; i < typ.NumMethod(); i++ {
 		method := typ.Method(i)
@@ -181,20 +155,11 @@ func suitableMethods(typ reflect.Type, methodPathMap map[string]string) (map[str
 			ReplyType: replyType,
 		}
 
-		// 注册http方法
-		if path, ok := methodPathMap[method.Name]; ok {
-			httpMethodMap[path] = &methodType{
-				method:    method,
-				ArgType:   argType,
-				ReplyType: replyType,
-			}
-		}
-
 		// 类型注册到pool中
 		reflectTypePools.Init(argType)
 		reflectTypePools.Init(replyType)
 	}
-	return methodMap, httpMethodMap
+	return methodMap
 }
 
 // 检查方法是否满足接口注册条件
@@ -402,7 +367,7 @@ func (svr *Server) processOneRequest(ctx context.Context, req *protocol.Message,
 		return
 	}
 
-	res, err := svr.handleRequest(ctx, req, true)
+	res, err := svr.handleRequest(ctx, req)
 	if err != nil {
 		log.Printf("failed to handle request: %v", err)
 	}
@@ -422,18 +387,8 @@ func (svr *Server) getService(servicePath string) (*service, error) {
 	return svc, nil
 }
 
-func (svr *Server) getHttpService(servicePath string) (*service, error) {
-	svr.serviceMapLock.RLock()
-	svc := svr.httpServiceMap[servicePath]
-	svr.serviceMapLock.RUnlock()
-	if svc == nil {
-		return nil, errors.New("can't find service " + servicePath)
-	}
-	return svc, nil
-}
-
 // 处理请求
-func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message, rpc bool) (res *protocol.Message, err error) {
+func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message) (res *protocol.Message, err error) {
 	// 请求服务，方法
 	servicePath := req.ServicePath
 	serviceMethod := req.ServiceMethod
@@ -441,23 +396,13 @@ func (svr *Server) handleRequest(ctx context.Context, req *protocol.Message, rpc
 	res.SetMessageType(protocol.Response)
 
 	// 对应的服务
-	var svc *service
-	if rpc {
-		svc, err = svr.getService(servicePath)
-	} else {
-		svc, err = svr.getHttpService(servicePath)
-	}
+	svc, err := svr.getService(servicePath)
 	if err != nil {
 		return svr.handleError(res, err)
 	}
 
 	// 对应的方法
-	var methodTyp *methodType
-	if rpc {
-		methodTyp = svc.methodMap[serviceMethod]
-	} else {
-		methodTyp = svc.httpMethodMap[serviceMethod]
-	}
+	methodTyp := svc.methodMap[serviceMethod]
 	if methodTyp == nil {
 		err = errors.New("can't find method " + serviceMethod)
 		return svr.handleError(res, err)
