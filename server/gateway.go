@@ -74,26 +74,24 @@ func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, 
 	// 缓存远端地址，这里RemoteAddr是string，而不是conn
 	ctx := context.WithValue(context.Background(), RemoteConnContexKey, r.RemoteAddr)
 
-	// 防止servicePath为空
-	if r.Header.Get(XServicePath) == "" {
-		servicePath := params.ByName("servicePath")
-		servicePath = strings.TrimPrefix(servicePath, "/")
-		r.Header.Set(XServicePath, servicePath)
-	}
+	// 解析路径
+	start := strings.Index(r.URL.Path[1:], "/") + 1
+	servicePath := r.URL.Path[:start]
+	serviceMethod := r.URL.Path[start:]
 
 	// response header
 	wh := w.Header()
 	var err error
-	servicePath := r.Header.Get(XServicePath)
 	if servicePath == "" {
 		err = errors.New("empty servicepath")
 	} else {
+		r.Header.Set(XServicePath, servicePath)
 		wh.Set(XServicePath, servicePath)
 	}
-	serviceMethod := r.Header.Get(XServiceMethod)
 	if serviceMethod == "" {
 		err = errors.New("empty servicemethod")
 	} else {
+		r.Header.Set(XServiceMethod, serviceMethod)
 		wh.Set(XServiceMethod, serviceMethod)
 	}
 	serializeType := r.Header.Get(XSerializeType)
@@ -112,12 +110,12 @@ func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	svc, err := svr.getService(servicePath)
+	svc, err := svr.getHttpService(servicePath)
 	if err != nil {
 		writeErrHeader(w, &wh, 403, err)
 		return
 	}
-	mtype, ok := svc.methodMap[serviceMethod]
+	mtype, ok := svc.httpMethodMap[serviceMethod]
 	if !ok {
 		err = errors.New("can't find method " + serviceMethod)
 		writeErrHeader(w, &wh, 403, err)
@@ -158,7 +156,7 @@ func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, 
 	ctx = context.WithValue(ctx, share.ResMetaDataKey, resMetadata)
 
 	// 处理请求
-	resMsg, err := svr.handleRequest(ctx, reqMsg)
+	resMsg, err := svr.handleRequest(ctx, reqMsg, false)
 	if err != nil {
 		writeErrHeader(w, &wh, 500, err)
 		return

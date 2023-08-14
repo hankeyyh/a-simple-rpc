@@ -14,6 +14,7 @@ require (
 
 require (
 	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/iancoleman/strcase v0.3.0 // indirect
 	golang.org/x/net v0.14.0 // indirect
 	golang.org/x/text v0.12.0 // indirect
 )
