@@ -4,7 +4,8 @@ go 1.19
 
 require (
 	github.com/gogo/protobuf v1.3.2
-	github.com/golang/protobuf v1.5.0
+	github.com/golang/protobuf v1.5.3
+	github.com/hankeyyh/simpleproto v0.0.0-20230814080720-f3b7823ff951
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/soheilhy/cmux v0.1.5
 	golang.org/x/sync v0.3.0

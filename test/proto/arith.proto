@@ -17,8 +17,8 @@ message Reply {
 
 service Arith {
     rpc Mul(Args) returns (Reply) {
-      option (srpc.method_option_http_api) = {
-        post: "/mul"
+      option (simpleproto.method_option_http_api) = {
+        path: "/mul"
       };
     }
 }
