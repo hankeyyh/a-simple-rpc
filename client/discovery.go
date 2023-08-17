@@ -1,5 +1,7 @@
 package client
 
+import "sync"
+
 type KVPair struct {
 	Key   string
 	Value string
@@ -35,5 +37,27 @@ func (p *Peer2PeerDiscovery) GetService() []*KVPair {
 }
 
 func (p *Peer2PeerDiscovery) Close() {
+
+}
+
+// 点对多寻址
+type MultiServersDiscovery struct {
+	pairsMu sync.RWMutex
+	pairs   []*KVPair
+}
+
+func NewMultiServersDiscovery(pairs []*KVPair) *MultiServersDiscovery {
+	return &MultiServersDiscovery{
+		pairs: pairs,
+	}
+}
+
+func (m *MultiServersDiscovery) GetService() []*KVPair {
+	m.pairsMu.RLock()
+	defer m.pairsMu.RUnlock()
+	return m.pairs
+}
+
+func (m *MultiServersDiscovery) Close() {
 
 }
