@@ -19,7 +19,6 @@ func TestClient(t *testing.T) {
 	flag.Parse()
 
 	d := client.NewMultiServersDiscovery([]*client.KVPair{{Key: *addr1}, {Key: *addr2}})
-	//d, _ := client.NewPeer2PeerDiscovery("127.0.0.1:8972", "")
 	option := client.DefaultOption
 	option.Heartbeat = true
 	option.HeartbeatInterval = time.Second
