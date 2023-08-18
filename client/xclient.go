@@ -3,10 +3,13 @@ package client
 import (
 	"context"
 	"errors"
+	error2 "github.com/hankeyyh/a-simple-rpc/error"
 	"golang.org/x/sync/singleflight"
 	"log"
+	"reflect"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -34,6 +37,7 @@ func NewServiceError(msg string) ServiceError {
 type XClient interface {
 	Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call) (*Call, error)
 	Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error
+	Broadcast(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error
 	Close() error
 }
 
@@ -84,6 +88,75 @@ func NewXClient(servicePath string, failMode FailMode, selectMode SelectMode, di
 func (x *xClient) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call) (*Call, error) {
 	//TODO implement me
 	panic("implement me")
+}
+
+// 向所有server发送请求，只有当所有server返回成功时，才算成功. FailMode, selectMode 不起作用
+func (x *xClient) Broadcast(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error {
+	if x.isShutdown {
+		return ErrXClientShutdown
+	}
+
+	var replyOnce sync.Once
+
+	// 集齐client
+	var clientMap = make(map[string]RPCClient)
+	for addr := range x.servers {
+		client, err := x.getCachedClient(addr)
+		if err != nil {
+			continue
+		}
+		clientMap[addr] = client
+	}
+
+	if len(clientMap) == 0 {
+		return ErrXClientNoServer
+	}
+
+	// 并发调用
+	lc := len(clientMap)
+	multiErr := new(error2.MultiError)
+	done := make(chan bool, lc)
+	for k, c := range clientMap {
+		go func(addr string, client RPCClient) {
+			var cloneReply interface{}
+			if reply != nil {
+				cloneReply = reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
+			}
+			err := x.wrapCall(ctx, client, serviceMethod, args, cloneReply)
+			done <- err == nil
+			if err != nil {
+				if uncoverError(err) {
+					x.removeClient(addr, client)
+				}
+				multiErr.Append(err)
+			}
+			if err == nil && reply != nil && cloneReply != nil {
+				replyOnce.Do(func() {
+					reflect.ValueOf(reply).Elem().Set(reflect.ValueOf(cloneReply).Elem())
+				})
+			}
+		}(k, c)
+	}
+
+	// 等待调用完成
+	timeout := time.NewTimer(x.option.BroadcastTimeout)
+loop:
+	for {
+		select {
+		case result := <-done:
+			lc--
+			// 全部结束，或有一个返回错误，则结束
+			if lc == 0 || result == false {
+				break loop
+			}
+		case <-timeout.C:
+			multiErr.Append(errors.New("timeout"))
+			break loop
+		}
+	}
+	timeout.Stop()
+
+	return multiErr.ErrorOrNil()
 }
 
 func (x *xClient) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error {

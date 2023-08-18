@@ -24,6 +24,9 @@ type Option struct {
 	Heartbeat           bool
 	HeartbeatInterval   time.Duration
 	MaxWaitForHeartbeat time.Duration
+
+	// 广播
+	BroadcastTimeout time.Duration
 }
 
 var DefaultOption = Option{
@@ -33,4 +36,5 @@ var DefaultOption = Option{
 	MaxWaitForHeartbeat: 30 * time.Second,
 	TCPKeepAlivePeriod:  time.Minute,
 	TimeToDisallow:      time.Minute,
+	BroadcastTimeout:    time.Minute,
 }

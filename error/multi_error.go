@@ -24,6 +24,9 @@ func (e *MultiError) Error() string {
 	return fmt.Sprintf("%v", e.Errors)
 }
 
-func (e *MultiError) Size() int {
-	return len(e.Errors)
+func (e *MultiError) ErrorOrNil() error {
+	if e == nil || len(e.Errors) == 0 {
+		return nil
+	}
+	return e
 }

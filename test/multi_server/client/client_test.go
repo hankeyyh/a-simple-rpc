@@ -39,7 +39,7 @@ func TestClient(t *testing.T) {
 
 func callMul(xclient client.XClient, args *proto.Args, reply *proto.Reply, i int) {
 	for {
-		err := xclient.Call(context.Background(), "Mul", args, reply)
+		err := xclient.Broadcast(context.Background(), "Mul", args, reply)
 		if err != nil {
 			log.Fatalf("failed to call: %v", err)
 		}
