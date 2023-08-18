@@ -85,80 +85,20 @@ func NewXClient(servicePath string, failMode FailMode, selectMode SelectMode, di
 	return client
 }
 
+// 异步调用， failMode不起作用
 func (x *xClient) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call) (*Call, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-// 向所有server发送请求，只有当所有server返回成功时，才算成功. FailMode, selectMode 不起作用
-func (x *xClient) Broadcast(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error {
 	if x.isShutdown {
-		return ErrXClientShutdown
+		return nil, ErrXClientShutdown
 	}
 
-	var replyOnce sync.Once
-
-	// 集齐client
-	var clientMap = make(map[string]RPCClient)
-	for addr := range x.servers {
-		client, err := x.getCachedClient(addr)
-		if err != nil {
-			continue
-		}
-		clientMap[addr] = client
+	_, client, err := x.selectClient(ctx, x.servicePath, serviceMethod, args)
+	if err != nil {
+		return nil, err
 	}
-
-	if len(clientMap) == 0 {
-		return ErrXClientNoServer
-	}
-
-	// 并发调用
-	lc := len(clientMap)
-	multiErr := new(error2.MultiError)
-	done := make(chan bool, lc)
-	for k, c := range clientMap {
-		go func(addr string, client RPCClient) {
-			var cloneReply interface{}
-			if reply != nil {
-				cloneReply = reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
-			}
-			err := x.wrapCall(ctx, client, serviceMethod, args, cloneReply)
-			done <- err == nil
-			if err != nil {
-				if uncoverError(err) {
-					x.removeClient(addr, client)
-				}
-				multiErr.Append(err)
-			}
-			if err == nil && reply != nil && cloneReply != nil {
-				replyOnce.Do(func() {
-					reflect.ValueOf(reply).Elem().Set(reflect.ValueOf(cloneReply).Elem())
-				})
-			}
-		}(k, c)
-	}
-
-	// 等待调用完成
-	timeout := time.NewTimer(x.option.BroadcastTimeout)
-loop:
-	for {
-		select {
-		case result := <-done:
-			lc--
-			// 全部结束，或有一个返回错误，则结束
-			if lc == 0 || result == false {
-				break loop
-			}
-		case <-timeout.C:
-			multiErr.Append(errors.New("timeout"))
-			break loop
-		}
-	}
-	timeout.Stop()
-
-	return multiErr.ErrorOrNil()
+	return client.Go(ctx, x.servicePath, serviceMethod, args, reply, done), nil
 }
 
+// 同步调用
 func (x *xClient) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error {
 	if x.isShutdown {
 		return ErrXClientShutdown
@@ -232,6 +172,75 @@ func (x *xClient) Call(ctx context.Context, serviceMethod string, args interface
 		log.Printf("failMode %v not supported", x.failMode)
 		return errors.New("failMode not supported")
 	}
+}
+
+// 向所有server发送请求，只有当所有server返回成功时，才算成功. FailMode, selectMode 不起作用
+func (x *xClient) Broadcast(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error {
+	if x.isShutdown {
+		return ErrXClientShutdown
+	}
+
+	var replyOnce sync.Once
+
+	// 集齐client
+	var clientMap = make(map[string]RPCClient)
+	for addr := range x.servers {
+		client, err := x.getCachedClient(addr)
+		if err != nil {
+			continue
+		}
+		clientMap[addr] = client
+	}
+
+	if len(clientMap) == 0 {
+		return ErrXClientNoServer
+	}
+
+	// 并发调用
+	lc := len(clientMap)
+	multiErr := new(error2.MultiError)
+	done := make(chan bool, lc)
+	for k, c := range clientMap {
+		go func(addr string, client RPCClient) {
+			var cloneReply interface{}
+			if reply != nil {
+				cloneReply = reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
+			}
+			err := x.wrapCall(ctx, client, serviceMethod, args, cloneReply)
+			done <- err == nil
+			if err != nil {
+				if uncoverError(err) {
+					x.removeClient(addr, client)
+				}
+				multiErr.Append(err)
+			}
+			if err == nil && reply != nil && cloneReply != nil {
+				replyOnce.Do(func() {
+					reflect.ValueOf(reply).Elem().Set(reflect.ValueOf(cloneReply).Elem())
+				})
+			}
+		}(k, c)
+	}
+
+	// 等待调用完成
+	timeout := time.NewTimer(x.option.BroadcastTimeout)
+loop:
+	for {
+		select {
+		case result := <-done:
+			lc--
+			// 全部结束，或有一个返回错误，则结束
+			if lc == 0 || result == false {
+				break loop
+			}
+		case <-timeout.C:
+			multiErr.Append(errors.New("timeout"))
+			break loop
+		}
+	}
+	timeout.Stop()
+
+	return multiErr.ErrorOrNil()
 }
 
 // 根据选择器算法，选择一个server
