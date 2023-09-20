@@ -76,9 +76,9 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 			xclient client.XClient
 		}
 
-		// New%[1]sClient wraps a XClient as %[1]sClient.
+		// new%[1]sClient wraps a XClient as %[1]sClient.
 		// You can pass a shared XClient object created by NewXClientFor%[1]s.
-		func New%[1]sClient(xclient client.XClient) *%[1]sClient {
+		func new%[1]sClient(xclient client.XClient) *%[1]sClient {
 			return &%[1]sClient{xclient: xclient}
 		}
 

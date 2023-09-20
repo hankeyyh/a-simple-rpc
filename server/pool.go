@@ -56,3 +56,13 @@ func (p *typePools) Get(t reflect.Type) interface{} {
 
 	return pool.Get()
 }
+
+func (p *typePools) GetRaw(t reflect.Type) interface{} {
+	var argv reflect.Value
+	if t.Kind() == reflect.Pointer {
+		argv = reflect.New(t.Elem())
+	} else {
+		argv = reflect.New(t)
+	}
+	return argv.Interface()
+}
