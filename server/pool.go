@@ -57,6 +57,7 @@ func (p *typePools) Get(t reflect.Type) interface{} {
 	return pool.Get()
 }
 
+// 用于benchmark测试不使用pool时的情况，可删除
 func (p *typePools) GetRaw(t reflect.Type) interface{} {
 	var argv reflect.Value
 	if t.Kind() == reflect.Pointer {
