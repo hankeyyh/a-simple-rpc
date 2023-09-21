@@ -16,20 +16,26 @@ func (a *Args) Reset() {
 }
 
 func BenchmarkTypePools_Get(b *testing.B) {
-	args := &Args{}
-	reflectTypePools.Put(reflect.TypeOf(args), args)
+	args := &Args{A: "yuhan", B: "yang"}
+	argType := reflect.TypeOf(args)
+	reflectTypePools.Init(argType)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		reflectTypePools.Get(reflect.TypeOf(args))
-	}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			reflectTypePools.Put(argType, args)
+			reflectTypePools.Get(reflect.TypeOf(args))
+		}
+	})
 	b.StopTimer()
 }
 
 func BenchmarkTypePools_GetRaw(b *testing.B) {
-	args := &Args{}
+	args := &Args{A: "yuhan", B: "yang"}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		reflectTypePools.GetRaw(reflect.TypeOf(args))
-	}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			reflectTypePools.GetRaw(reflect.TypeOf(args))
+		}
+	})
 	b.StopTimer()
 }
