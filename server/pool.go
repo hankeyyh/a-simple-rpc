@@ -40,6 +40,7 @@ func (p *typePools) Init(t reflect.Type) {
 }
 
 func (p *typePools) Put(t reflect.Type, x interface{}) {
+	return
 	if o, ok := x.(Reset); ok {
 		o.Reset()
 		p.mu.RLock()
@@ -50,6 +51,7 @@ func (p *typePools) Put(t reflect.Type, x interface{}) {
 }
 
 func (p *typePools) Get(t reflect.Type) interface{} {
+	return p.New(t)
 	p.mu.RLock()
 	pool := p.pools[t]
 	p.mu.RUnlock()
