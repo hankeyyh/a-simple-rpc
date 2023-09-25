@@ -62,6 +62,9 @@ type Server struct {
 	serviceMap     map[string]*service
 	serviceMapLock sync.RWMutex
 
+	// 插件
+	Plugins PluginContainer
+
 	// 活跃连接缓存，锁
 	mu            sync.RWMutex
 	actionConnMap map[net.Conn]interface{}
@@ -82,6 +85,7 @@ type OptionFn func(s *Server)
 
 func NewServer(options ...OptionFn) *Server {
 	s := &Server{
+		Plugins:       &pluginContainer{},
 		serviceMap:    make(map[string]*service),
 		actionConnMap: make(map[net.Conn]interface{}),
 		doneChan:      make(chan struct{}),
