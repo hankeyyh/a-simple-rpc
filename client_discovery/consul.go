@@ -17,29 +17,6 @@ type ConsulDiscovery struct {
 	pairs   []*client.KVPair
 }
 
-type ConsulDiscoveryOption func(c *ConsulDiscovery)
-
-func NewConsulDiscovery(options ...ConsulDiscoveryOption) *ConsulDiscovery {
-	cd := new(ConsulDiscovery)
-
-	for _, option := range options {
-		option(cd)
-	}
-	return cd
-}
-
-func WithConsulPath(path []string) ConsulDiscoveryOption {
-	return func(c *ConsulDiscovery) {
-		c.ConsulPath = path
-	}
-}
-
-func WithServicePath(path string) ConsulDiscoveryOption {
-	return func(c *ConsulDiscovery) {
-		c.ServicePath = path
-	}
-}
-
 func (c *ConsulDiscovery) GetService() []*client.KVPair {
 	c.pairsMu.RLock()
 	defer c.pairsMu.RUnlock()

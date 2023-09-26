@@ -70,11 +70,24 @@ func (svr *Server) startHTTP1APIGateway(ln net.Listener) {
 	}
 }
 
+// 健康检查
+func (svr *Server) handleGatewayHealthCheck(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	w.WriteHeader(http.StatusOK)
+	log.Printf("recv http heartbeat")
+}
+
 // 处理http请求，并返回
 func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	// 缓存远端地址，这里RemoteAddr是string，而不是conn
 	ctx := context.WithValue(context.Background(), RemoteConnContexKey, r.RemoteAddr)
 	var err error
+
+	// 健康检查
+	if r.URL.Path == "/health" {
+		w.WriteHeader(http.StatusOK)
+		log.Printf("recv http heartbeat")
+		return
+	}
 
 	// 解析路径
 	paths := strings.Split(r.URL.Path, "/")

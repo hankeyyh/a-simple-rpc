@@ -42,7 +42,7 @@ func createServer(addr string) {
 	svr := server.NewServer()
 	defer svr.Close()
 
-	svr.RegisterName("Arith", new(ArithImp))
+	svr.RegisterName("Arith", new(ArithImp), "")
 	log.Println("server start at: ", addr)
 	err := svr.Serve("tcp", addr)
 	if err != nil {
