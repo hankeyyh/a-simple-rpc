@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	rpc_error "github.com/hankeyyh/a-simple-rpc/error"
 	"github.com/hankeyyh/a-simple-rpc/protocol"
 	"github.com/hankeyyh/a-simple-rpc/share"
 	"github.com/soheilhy/cmux"
@@ -98,11 +99,23 @@ func NewServer(options ...OptionFn) *Server {
 	return s
 }
 
-func (svr *Server) Register(serviceInstance interface{}) error {
-	return svr.RegisterName("", serviceInstance)
+func (svr *Server) Register(serviceInstance interface{}, metadata string) error {
+	sname, err := svr.register("", serviceInstance)
+	if err != nil {
+		return err
+	}
+	return svr.Plugins.DoRegister(sname, serviceInstance, metadata)
 }
 
-func (svr *Server) RegisterName(serviceName string, serviceInstance interface{}) error {
+func (svr *Server) RegisterName(serviceName string, serviceInstance interface{}, metadata string) error {
+	_, err := svr.register(serviceName, serviceInstance)
+	if err != nil {
+		return err
+	}
+	return svr.Plugins.DoRegister(serviceName, serviceInstance, metadata)
+}
+
+func (svr *Server) register(serviceName string, serviceInstance interface{}) (string, error) {
 	svr.serviceMapLock.Lock()
 	defer svr.serviceMapLock.Unlock()
 
@@ -118,13 +131,13 @@ func (svr *Server) RegisterName(serviceName string, serviceInstance interface{})
 	// 注册合法的方法
 	validMethodMap := suitableRPCMethods(service.instanceType)
 	if len(validMethodMap) == 0 {
-		return errors.New("register: type " + service.name + " has no exported methods of suitable type")
+		return sname, errors.New("register: type " + service.name + " has no exported methods of suitable type")
 	}
 	service.methodMap = validMethodMap
 
 	svr.serviceMap[service.name] = service
 
-	return nil
+	return sname, nil
 }
 
 func isExported(name string) bool {
@@ -543,6 +556,17 @@ func (svr *Server) auth(ctx context.Context, req *protocol.Message) error {
 
 // unregisters all services.
 func (svr *Server) UnregisterAll() error {
-	// todo plugin unregister service
+	svr.serviceMapLock.RLock()
+	defer svr.serviceMapLock.RUnlock()
+	var errs []error
+	for sname := range svr.serviceMap {
+		if err := svr.Plugins.DoUnRegister(sname); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return rpc_error.NewMultiError(errs)
+	}
+
 	return nil
 }
