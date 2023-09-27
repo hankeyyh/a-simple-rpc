@@ -1,4 +1,4 @@
-package test
+package cmux_test
 
 import (
 	"fmt"

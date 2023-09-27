@@ -11,31 +11,33 @@ import (
 // consul服务发现对应服务端的plugin
 type ConsulPlugin struct {
 	// consul 地址
-	ConsulPath string
+	ConsulAddr string
 	// 服务地址
-	ServicePath string
+	ServiceAddr string
 	ServiceName string
 	// 健康检查
+	HeartbeatAddr       string
 	HeartbeatInternal   time.Duration
 	MaxWaitForHeartbeat time.Duration
 }
 
 type ConsulOpt func(plugin *ConsulPlugin)
 
-func WithConsulPath(path string) ConsulOpt {
+func WithConsulAddr(addr string) ConsulOpt {
 	return func(c *ConsulPlugin) {
-		c.ConsulPath = path
+		c.ConsulAddr = addr
 	}
 }
 
-func WithServicePath(path string) ConsulOpt {
+func WithServiceAddr(addr string) ConsulOpt {
 	return func(c *ConsulPlugin) {
-		c.ServicePath = path
+		c.ServiceAddr = addr
 	}
 }
 
-func WithHeartbeat(interval, maxWait time.Duration) ConsulOpt {
+func WithHeartbeat(heartbeatAddr string, interval, maxWait time.Duration) ConsulOpt {
 	return func(c *ConsulPlugin) {
+		c.HeartbeatAddr = heartbeatAddr
 		c.HeartbeatInternal = interval
 		c.MaxWaitForHeartbeat = maxWait
 	}
@@ -54,14 +56,14 @@ func (c *ConsulPlugin) Register(name string, rcvr interface{}, metadata string) 
 
 	// consul 配置
 	config := consul_api.DefaultConfig()
-	config.Address = c.ConsulPath
+	config.Address = c.ConsulAddr
 
 	cclient, err := consul_api.NewClient(config)
 	if err != nil {
 		return err
 	}
 	// 注册配置项
-	svrHost, port, err := net.SplitHostPort(c.ServicePath)
+	svrHost, port, err := net.SplitHostPort(c.ServiceAddr)
 	if err != nil {
 		return err
 	}
@@ -69,7 +71,7 @@ func (c *ConsulPlugin) Register(name string, rcvr interface{}, metadata string) 
 	if err != nil {
 		return err
 	}
-	httpPath := fmt.Sprintf("http://%s/health", c.ServicePath)
+	httpPath := fmt.Sprintf("http://%s/health", c.HeartbeatAddr)
 	registry := new(consul_api.AgentServiceRegistration)
 	registry.Name = name
 	registry.ID = name
@@ -89,7 +91,7 @@ func (c *ConsulPlugin) Register(name string, rcvr interface{}, metadata string) 
 
 func (c *ConsulPlugin) UnRegister(name string) error {
 	config := consul_api.DefaultConfig()
-	config.Address = c.ConsulPath
+	config.Address = c.ConsulAddr
 	cclient, err := consul_api.NewClient(config)
 	if err != nil {
 		return err
