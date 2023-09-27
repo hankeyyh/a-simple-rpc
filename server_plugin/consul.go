@@ -5,6 +5,7 @@ import (
 	consul_api "github.com/hashicorp/consul/api"
 	"net"
 	"strconv"
+	"time"
 )
 
 // consul服务发现对应服务端的plugin
@@ -14,6 +15,9 @@ type ConsulPlugin struct {
 	// 服务地址
 	ServicePath string
 	ServiceName string
+	// 健康检查
+	HeartbeatInternal   time.Duration
+	MaxWaitForHeartbeat time.Duration
 }
 
 type ConsulOpt func(plugin *ConsulPlugin)
@@ -27,6 +31,13 @@ func WithConsulPath(path string) ConsulOpt {
 func WithServicePath(path string) ConsulOpt {
 	return func(c *ConsulPlugin) {
 		c.ServicePath = path
+	}
+}
+
+func WithHeartbeat(interval, maxWait time.Duration) ConsulOpt {
+	return func(c *ConsulPlugin) {
+		c.HeartbeatInternal = interval
+		c.MaxWaitForHeartbeat = maxWait
 	}
 }
 
@@ -68,8 +79,8 @@ func (c *ConsulPlugin) Register(name string, rcvr interface{}, metadata string) 
 		HTTP:                           httpPath,
 		TCPUseTLS:                      false,
 		TLSSkipVerify:                  true,
-		Interval:                       "10s",
-		DeregisterCriticalServiceAfter: "1m",
+		Interval:                       c.HeartbeatInternal.String(),
+		DeregisterCriticalServiceAfter: c.MaxWaitForHeartbeat.String(),
 	}
 	// 服务注册
 	err = cclient.Agent().ServiceRegister(registry)
