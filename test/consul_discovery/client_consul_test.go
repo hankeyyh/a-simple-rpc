@@ -10,9 +10,12 @@ import (
 )
 
 func TestClientWithConsul(t *testing.T) {
-	d := client.NewConsulDiscovery("Arith", "127.0.0.1:8500")
+	d, err := client.NewConsulDiscovery("Arith", "127.0.0.1:8500")
+	if err != nil {
+		t.Fatal(err)
+	}
 	option := client.DefaultOption
-	xclient := client.NewXClient("Arith", client.FailFast, client.RandomSelect, d, option)
+	xclient := client.NewXClient("Arith", client.FailOver, client.RandomSelect, d, option)
 	defer xclient.Close()
 
 	var a int32 = 2

@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	error2 "github.com/hankeyyh/a-simple-rpc/error"
 	"golang.org/x/sync/singleflight"
 	"log"
@@ -50,6 +51,7 @@ type xClient struct {
 	selectMode SelectMode
 	discovery  ServiceDiscovery
 	selector   Selector
+	ch         chan []*KVPair // 监听服务变化
 
 	mu      sync.RWMutex
 	servers map[string]string
@@ -81,6 +83,13 @@ func NewXClient(servicePath string, failMode FailMode, selectMode SelectMode, di
 
 	// 选择器
 	client.selector = newSelector(selectMode, client.servers)
+
+	// 服务watch
+	ch := discovery.WatchService()
+	if ch != nil {
+		client.ch = ch
+		go client.watch(ch)
+	}
 
 	return client
 }
@@ -140,6 +149,7 @@ func (x *xClient) Call(ctx context.Context, serviceMethod string, args interface
 	case FailOver: // 尝试下一个服务实例
 		retries := x.option.Retries
 		for retries >= 0 {
+			fmt.Println("remain retries: ", retries)
 			retries--
 
 			if client != nil {
@@ -373,4 +383,24 @@ func (x *xClient) Close() error {
 	x.mu.Unlock()
 
 	return nil
+}
+
+// 监听服务变化
+func (x *xClient) watch(ch chan []*KVPair) {
+	// pairs 是服务最新的一组地址
+	for pairs := range ch {
+		servers := make(map[string]string)
+		for _, pair := range pairs {
+			servers[pair.Key] = pair.Value
+		}
+
+		x.mu.Lock()
+		x.servers = servers
+
+		// 更新选择器中服务列表
+		if x.selector != nil {
+			x.selector.UpdateServer(servers)
+		}
+		x.mu.Unlock()
+	}
 }
