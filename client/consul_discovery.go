@@ -3,6 +3,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"github.com/hankeyyh/a-simple-rpc/log"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/api/watch"
 	"sync"
@@ -35,7 +36,7 @@ func NewConsulDiscovery(serviceName string, consulAddr string) (*ConsulDiscovery
 
 	pairs, err := cd.findServiceAddress()
 	if err != nil {
-		fmt.Printf("findServiceAddress fail, err: %v\n", err)
+		log.Errorf("findServiceAddress fail, err: ", err)
 		return nil, ErrServiceNotFound
 	}
 	cd.pairsMu.Lock()
@@ -113,7 +114,7 @@ func (c *ConsulDiscovery) watch() {
 
 	plan, err := watch.Parse(params)
 	if err != nil {
-		fmt.Println("watch.Parse fail, err: ", err)
+		log.Error("watch.Parse fail, err: ", err)
 		return
 	}
 
@@ -121,7 +122,7 @@ func (c *ConsulDiscovery) watch() {
 		entries := raw.([]*api.ServiceEntry)
 		pairs := make([]*KVPair, 0, len(entries))
 		for _, entry := range entries {
-			fmt.Printf("service %s is available at %s:%d, id: %s\n", entry.Service.Service, entry.Service.Address,
+			log.Infof("service %s is available at %s:%d, id: %s\n", entry.Service.Service, entry.Service.Address,
 				entry.Service.Port, entry.Service.ID)
 			pairs = append(pairs, &KVPair{
 				Key:   fmt.Sprintf("%s:%d", entry.Service.Address, entry.Service.Port),
@@ -145,7 +146,7 @@ func (c *ConsulDiscovery) watch() {
 				select {
 				case ch <- c.pairs:
 				case <-time.After(time.Minute):
-					fmt.Println("chan is full and new change has been dropped")
+					log.Warn("chan is full and new change has been dropped")
 				}
 			}()
 		}
@@ -153,7 +154,7 @@ func (c *ConsulDiscovery) watch() {
 	}
 
 	if err = plan.Run(c.ConsulAddr); err != nil {
-		fmt.Println("plan.Run fail, err: ", err)
+		log.Error("plan.Run fail, err: ", err)
 		return
 	}
 }

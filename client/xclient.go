@@ -3,10 +3,9 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 	error2 "github.com/hankeyyh/a-simple-rpc/error"
+	"github.com/hankeyyh/a-simple-rpc/log"
 	"golang.org/x/sync/singleflight"
-	"log"
 	"reflect"
 	"strings"
 	"sync"
@@ -149,7 +148,6 @@ func (x *xClient) Call(ctx context.Context, serviceMethod string, args interface
 	case FailOver: // 尝试下一个服务实例
 		retries := x.option.Retries
 		for retries >= 0 {
-			fmt.Println("remain retries: ", retries)
 			retries--
 
 			if client != nil {
@@ -179,7 +177,7 @@ func (x *xClient) Call(ctx context.Context, serviceMethod string, args interface
 		}
 		return err
 	default:
-		log.Printf("failMode %v not supported", x.failMode)
+		log.Errorf("failMode %v not supported", x.failMode)
 		return errors.New("failMode not supported")
 	}
 }
