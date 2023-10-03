@@ -78,29 +78,33 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 
 		// new%[1]sClient wraps a XClient as %[1]sClient.
 		// You can pass a shared XClient object created by NewXClientFor%[1]s.
-		func new%[1]sClient(xclient client.XClient) *%[1]sClient {
+		func New%[1]sClient(xclient client.XClient) *%[1]sClient {
 			return &%[1]sClient{xclient: xclient}
 		}
 
 		// NewXClientFor%[1]s creates a XClient.
 		// You can configure this client with more options such as etcd registry, serialize type, select algorithm and fail mode.
-		func NewXClientFor%[1]s(addr string) (client.XClient, error) {
-			d, err := client.NewPeer2PeerDiscovery("tcp@"+addr, "")
-			if err != nil {
-				return nil, err
-			}
-			
-			opt := client.DefaultOption
+		func NewXClientFor%[1]s(addr string, failMode client.FailMode, selectMode client.SelectMode, d client.ServiceDiscovery, opt client.Option) client.XClient {
 			opt.SerializeType = protocol.ProtoBuffer
 
-			xclient := client.NewXClient("%[1]s", client.FailTry, client.RoundRobin, d, opt)
+			xclient := client.NewXClient("%[1]s", failMode, selectMode, d, opt)
 
-			return xclient,nil
+			return xclient
 		}
 	`, serviceName))
 	for _, method := range service.Methods {
 		generateClientCode(g, service, method)
 	}
+
+	generateClientCloseCode(g, service)
+}
+
+func generateClientCloseCode(g *protogen.GeneratedFile, service *protogen.Service) {
+	serviceName := upperFirstLatter(service.GoName)
+
+	g.P(fmt.Sprintf(`func (c *%sClient) Close() error {
+		return c.xclient.Close()
+	}`, serviceName))
 }
 
 func generateClientCode(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {

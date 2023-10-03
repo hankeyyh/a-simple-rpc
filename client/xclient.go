@@ -148,6 +148,7 @@ func (x *xClient) Call(ctx context.Context, serviceMethod string, args interface
 	case FailOver: // 尝试下一个服务实例
 		retries := x.option.Retries
 		for retries >= 0 {
+			log.Infof("retries left: %d", retries)
 			retries--
 
 			if client != nil {
@@ -260,6 +261,7 @@ func (x *xClient) selectClient(ctx context.Context, servicePath, serviceMethod s
 	}
 
 	client, err := x.getCachedClient(k)
+	log.Infof("select server: %s", k)
 	return k, client, err
 }
 

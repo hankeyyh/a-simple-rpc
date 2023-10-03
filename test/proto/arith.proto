@@ -1,7 +1,7 @@
 syntax = "proto3";
 package arith;
 
-option go_package = "./proto";
+option go_package = "/pb";
 
 message Args {
   optional int32 A = 1;
@@ -13,5 +13,8 @@ message Reply {
 }
 
 service Arith {
-    rpc Mul(Args) returns (Reply) {}
+  rpc Add(Args) returns (Reply){}
+  rpc Sub(Args) returns (Reply){}
+  rpc Mul(Args) returns (Reply) {}
+  rpc Divide(Args) returns (Reply) {}
 }

@@ -3,7 +3,7 @@ package consul_discovery
 import (
 	"context"
 	"github.com/hankeyyh/a-simple-rpc/client"
-	"github.com/hankeyyh/a-simple-rpc/test/proto"
+	"github.com/hankeyyh/a-simple-rpc/test/pb"
 	"log"
 	"testing"
 	"time"
@@ -15,24 +15,26 @@ func TestClientWithConsul(t *testing.T) {
 		t.Fatal(err)
 	}
 	option := client.DefaultOption
-	xclient := client.NewXClient("Arith", client.FailOver, client.RandomSelect, d, option)
-	defer xclient.Close()
+	xclient := pb.NewXClientForArith("Arith", client.FailOver, client.RandomSelect, d, option)
+	arithClient := pb.NewArithClient(xclient)
+	defer arithClient.Close()
 
 	var a int32 = 2
 	var b int32 = 3
-	args := &proto.Args{
+	args := &pb.Args{
 		A: &a,
 		B: &b,
 	}
 
-	reply := &proto.Reply{}
+	reply := &pb.Reply{}
 
-	callMul(xclient, args, reply, 1)
+	callMul(arithClient, args, reply, 1)
 }
 
-func callMul(xclient client.XClient, args *proto.Args, reply *proto.Reply, i int) {
+func callMul(arithClient *pb.ArithClient, args *pb.Args, reply *pb.Reply, i int) {
+	var err error
 	for {
-		err := xclient.Call(context.Background(), "Mul", args, reply)
+		reply, err = arithClient.Mul(context.Background(), args)
 		if err != nil {
 			log.Fatalf("failed to call: %v", err)
 		}
