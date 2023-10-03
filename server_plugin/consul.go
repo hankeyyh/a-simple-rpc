@@ -74,7 +74,7 @@ func (c *ConsulPlugin) Register(name string, rcvr interface{}, metadata string) 
 	httpPath := fmt.Sprintf("http://%s/health", c.HeartbeatAddr)
 	registry := new(consul_api.AgentServiceRegistration)
 	registry.Name = name
-	registry.ID = name
+	registry.ID = fmt.Sprintf("%s-%s:%d", name, svrHost, svrPort)
 	registry.Address = svrHost
 	registry.Port = svrPort
 	registry.Check = &consul_api.AgentServiceCheck{
