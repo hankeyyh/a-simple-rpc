@@ -84,7 +84,7 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 
 		// NewXClientFor%[1]s creates a XClient.
 		// You can configure this client with more options such as etcd registry, serialize type, select algorithm and fail mode.
-		func NewXClientFor%[1]s(addr string, failMode client.FailMode, selectMode client.SelectMode, d client.ServiceDiscovery, opt client.Option) client.XClient {
+		func NewXClientFor%[1]s(failMode client.FailMode, selectMode client.SelectMode, d client.ServiceDiscovery, opt client.Option) client.XClient {
 			opt.SerializeType = protocol.ProtoBuffer
 
 			xclient := client.NewXClient("%[1]s", failMode, selectMode, d, opt)

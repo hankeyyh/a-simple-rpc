@@ -35,7 +35,7 @@ func NewArithClient(xclient client.XClient) *ArithClient {
 
 // NewXClientForArith creates a XClient.
 // You can configure this client with more options such as etcd registry, serialize type, select algorithm and fail mode.
-func NewXClientForArith(addr string, failMode client.FailMode, selectMode client.SelectMode, d client.ServiceDiscovery, opt client.Option) client.XClient {
+func NewXClientForArith(failMode client.FailMode, selectMode client.SelectMode, d client.ServiceDiscovery, opt client.Option) client.XClient {
 	opt.SerializeType = protocol.ProtoBuffer
 
 	xclient := client.NewXClient("Arith", failMode, selectMode, d, opt)

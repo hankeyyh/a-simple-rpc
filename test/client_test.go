@@ -15,7 +15,7 @@ func TestClient(t *testing.T) {
 	option := client.DefaultOption
 	option.Heartbeat = true
 	option.HeartbeatInterval = time.Second
-	xclient := pb.NewXClientForArith("Arith", client.FailFast, client.RandomSelect, d, option)
+	xclient := pb.NewXClientForArith(client.FailFast, client.RandomSelect, d, option)
 	arithClient := pb.NewArithClient(xclient)
 	defer arithClient.Close()
 
@@ -37,7 +37,7 @@ func TestMultiClient(t *testing.T) {
 	option.Heartbeat = true
 	option.HeartbeatInterval = time.Second
 	option.IdleTimeout = time.Second * 2
-	xclient := pb.NewXClientForArith("Arith", client.FailTry, client.RandomSelect, d, option)
+	xclient := pb.NewXClientForArith(client.FailTry, client.RandomSelect, d, option)
 	arithClient := pb.NewArithClient(xclient)
 	defer arithClient.Close()
 

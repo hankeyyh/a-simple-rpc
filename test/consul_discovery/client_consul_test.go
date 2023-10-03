@@ -15,7 +15,7 @@ func TestClientWithConsul(t *testing.T) {
 		t.Fatal(err)
 	}
 	option := client.DefaultOption
-	xclient := pb.NewXClientForArith("Arith", client.FailOver, client.RandomSelect, d, option)
+	xclient := pb.NewXClientForArith(client.FailOver, client.RandomSelect, d, option)
 	arithClient := pb.NewArithClient(xclient)
 	defer arithClient.Close()
 
