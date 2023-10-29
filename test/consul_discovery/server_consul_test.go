@@ -27,6 +27,6 @@ func startServer(serveAddr, heartBeatAddr string) {
 	)
 	svr.Plugins.Add(consulPlugin)
 
-	svr.RegisterName("Arith", new(test.ArithImp), "")
+	svr.RegisterName("Arith", new(test.ArithImp))
 	svr.Serve("tcp", serveAddr)
 }

@@ -99,6 +99,7 @@ func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, 
 		writeErrHeader(w, &wh, 403, err)
 		return
 	}
+	// todo paths 与method.url 进行比较，method绑定的url可以自己设置
 	servicePath := strcase.ToCamel(paths[1])
 	serviceMethod := strcase.ToCamel(paths[2])
 

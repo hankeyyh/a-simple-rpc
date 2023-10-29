@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"github.com/hankeyyh/a-simple-rpc/server"
-	"github.com/hankeyyh/a-simple-rpc/test/proto"
+	"github.com/hankeyyh/a-simple-rpc/test/pb"
 	"log"
 	"testing"
 )
@@ -17,13 +17,13 @@ var (
 type ArithImp struct {
 }
 
-func (s *ArithImp) Add(ctx context.Context, args *proto.Args, reply *proto.Reply) error {
+func (s *ArithImp) Add(ctx context.Context, args *pb.Args, reply *pb.Reply) error {
 	c := args.GetA() + args.GetB()
 	reply.C = &c
 	return nil
 }
 
-func (s *ArithImp) Mul(ctx context.Context, args *proto.Args, reply *proto.Reply) error {
+func (s *ArithImp) Mul(ctx context.Context, args *pb.Args, reply *pb.Reply) error {
 	c := args.GetA() * args.GetB()
 	reply.C = &c
 	return nil
@@ -42,7 +42,7 @@ func createServer(addr string) {
 	svr := server.NewServer()
 	defer svr.Close()
 
-	svr.RegisterName("Arith", new(ArithImp), "")
+	svr.RegisterName("Arith", new(ArithImp))
 	log.Println("server start at: ", addr)
 	err := svr.Serve("tcp", addr)
 	if err != nil {

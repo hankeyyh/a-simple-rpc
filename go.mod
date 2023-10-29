@@ -15,6 +15,7 @@ require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/fatih/color v1.14.1 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/hankeyyh/a-simple-srpc v0.0.0-20231028164746-dc33a9ce39cf // indirect
 	github.com/hashicorp/consul/api v1.25.1 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v1.5.0 // indirect

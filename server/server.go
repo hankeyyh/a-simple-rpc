@@ -99,20 +99,20 @@ func NewServer(options ...OptionFn) *Server {
 	return s
 }
 
-func (svr *Server) Register(serviceInstance interface{}, metadata string) error {
+func (svr *Server) Register(serviceInstance interface{}) error {
 	sname, err := svr.register("", serviceInstance)
 	if err != nil {
 		return err
 	}
-	return svr.Plugins.DoRegister(sname, serviceInstance, metadata)
+	return svr.Plugins.DoRegister(sname, serviceInstance)
 }
 
-func (svr *Server) RegisterName(serviceName string, serviceInstance interface{}, metadata string) error {
+func (svr *Server) RegisterName(serviceName string, serviceInstance interface{}) error {
 	_, err := svr.register(serviceName, serviceInstance)
 	if err != nil {
 		return err
 	}
-	return svr.Plugins.DoRegister(serviceName, serviceInstance, metadata)
+	return svr.Plugins.DoRegister(serviceName, serviceInstance)
 }
 
 func (svr *Server) register(serviceName string, serviceInstance interface{}) (string, error) {

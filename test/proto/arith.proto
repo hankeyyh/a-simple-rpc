@@ -3,6 +3,8 @@ package arith;
 
 option go_package = "/pb";
 
+import "srpc.proto";
+
 message Args {
   optional int32 A = 1;
   optional int32 B = 2;
@@ -13,8 +15,30 @@ message Reply {
 }
 
 service Arith {
-  rpc Add(Args) returns (Reply){}
-  rpc Sub(Args) returns (Reply){}
-  rpc Mul(Args) returns (Reply) {}
-  rpc Divide(Args) returns (Reply) {}
+  option (srpc.service_base_path) = "/arith";
+
+  rpc Add(Args) returns (Reply){
+    option (srpc.method_option_http_api) = {
+      get: "/add"
+      post: "/add"
+    };
+  }
+  rpc Sub(Args) returns (Reply){
+    option (srpc.method_option_http_api) = {
+      get: "/sub"
+      post: "/sub"
+    };
+  }
+  rpc Mul(Args) returns (Reply) {
+    option (srpc.method_option_http_api) = {
+      get: "/mul"
+      post: "/mul"
+    };
+  }
+  rpc Divide(Args) returns (Reply) {
+    option (srpc.method_option_http_api) = {
+      get: "/div"
+      post: "/div"
+    };
+  }
 }

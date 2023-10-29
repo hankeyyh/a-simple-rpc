@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	srpc "github.com/hankeyyh/a-simple-srpc"
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
 	"strings"
 )
@@ -120,6 +122,8 @@ func generateClientCode(g *protogen.GeneratedFile, service *protogen.Service, me
 }
 
 func generateMethod(g *protogen.GeneratedFile, method *protogen.Method) {
+	methodOptionId := proto.GetExtension(method.Desc.Options(), srpc.E_MethodOptionId).(uint32)
+	g.P(methodOptionId)
 	methodName := upperFirstLatter(method.GoName)
 	inType := g.QualifiedGoIdent(method.Input.GoIdent)
 	outType := g.QualifiedGoIdent(method.Output.GoIdent)

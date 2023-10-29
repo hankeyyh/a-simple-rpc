@@ -51,7 +51,7 @@ func NewConsulPlugin(opts ...ConsulOpt) *ConsulPlugin {
 	return consulPlugin
 }
 
-func (c *ConsulPlugin) Register(name string, rcvr interface{}, metadata string) error {
+func (c *ConsulPlugin) Register(name string, rcvr interface{}) error {
 	c.ServiceName = name
 
 	// consul 配置

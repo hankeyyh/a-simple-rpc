@@ -1,0 +1,22 @@
+syntax = "proto3";
+package srpc;
+
+option go_package = "github.com/hankeyyh/a-simple-srpc";
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.ServiceOptions {
+  optional uint32 service_option_id = 10001;
+  optional string service_base_path = 10002; // url base path
+}
+
+
+extend google.protobuf.MethodOptions {
+  optional uint32 method_option_id = 10002;
+  optional HttpRouteOptions method_option_http_api = 10003;
+}
+
+message HttpRouteOptions {
+  optional string get = 1;  // get path
+  optional string post = 2; // post path
+}

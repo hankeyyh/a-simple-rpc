@@ -12,7 +12,7 @@ type PluginContainer interface {
 	Remove(plugin Plugin)
 	All() []Plugin
 
-	DoRegister(name string, rcvr interface{}, metadata string) error
+	DoRegister(name string, rcvr interface{}) error
 	DoUnRegister(name string) error
 
 	DoPostConnAccept(conn net.Conn) (net.Conn, bool)
@@ -23,7 +23,7 @@ type PluginContainer interface {
 
 type (
 	RegisterPlugin interface {
-		Register(name string, rcvr interface{}, metadata string) error
+		Register(name string, rcvr interface{}) error
 		UnRegister(name string) error
 	}
 
@@ -69,11 +69,11 @@ func (p *pluginContainer) All() []Plugin {
 	return p.plugins
 }
 
-func (p *pluginContainer) DoRegister(name string, rcvr interface{}, metadata string) error {
+func (p *pluginContainer) DoRegister(name string, rcvr interface{}) error {
 	var errs []error
 	for _, pp := range p.plugins {
 		if rp, ok := pp.(RegisterPlugin); ok {
-			err := rp.Register(name, rcvr, metadata)
+			err := rp.Register(name, rcvr)
 			if err != nil {
 				errs = append(errs, err)
 			}
