@@ -6,7 +6,6 @@ import (
 	"errors"
 	"github.com/hankeyyh/a-simple-rpc/protocol"
 	"github.com/hankeyyh/a-simple-rpc/share"
-	"github.com/iancoleman/strcase"
 	"github.com/julienschmidt/httprouter"
 	"github.com/soheilhy/cmux"
 	"io"
@@ -100,20 +99,21 @@ func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	// todo paths 与method.url 进行比较，method绑定的url可以自己设置
-	servicePath := strcase.ToCamel(paths[1])
-	serviceMethod := strcase.ToCamel(paths[2])
+	serviceBasePath := paths[1]
+	httpPath := paths[2]
+	httpMethod := r.Method
 
-	if servicePath == "" {
+	if serviceBasePath == "" {
 		err = errors.New("empty servicepath")
 	} else {
-		r.Header.Set(XServicePath, servicePath)
-		wh.Set(XServicePath, servicePath)
+		r.Header.Set(XServicePath, serviceBasePath)
+		wh.Set(XServicePath, serviceBasePath)
 	}
-	if serviceMethod == "" {
+	if httpMethod == "" {
 		err = errors.New("empty servicemethod")
 	} else {
-		r.Header.Set(XServiceMethod, serviceMethod)
-		wh.Set(XServiceMethod, serviceMethod)
+		r.Header.Set(XServiceMethod, httpMethod)
+		wh.Set(XServiceMethod, httpMethod)
 	}
 	serializeType := r.Header.Get(XSerializeType)
 	if serializeType == "" {
@@ -131,14 +131,14 @@ func (svr *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	svc, err := svr.getService(servicePath)
+	// 根据http path 定位服务，方法
+	svc, err := svr.getServiceByBathPath(serviceBasePath)
 	if err != nil {
 		writeErrHeader(w, &wh, 403, err)
 		return
 	}
-	mtype, ok := svc.methodMap[serviceMethod]
-	if !ok {
-		err = errors.New("can't find method " + serviceMethod)
+	mtype, err := svc.getMethodByHttpPath(httpMethod, httpPath)
+	if err != nil {
 		writeErrHeader(w, &wh, 403, err)
 		return
 	}

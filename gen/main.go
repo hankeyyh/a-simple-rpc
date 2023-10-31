@@ -6,6 +6,7 @@ import (
 	srpc "github.com/hankeyyh/a-simple-srpc"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 	"strings"
 )
@@ -70,8 +71,12 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 		generateMethod(g, method)
 	}
 	g.P("}")
-
 	g.P()
+
+	g.P("//================== service descriptor ===================")
+	generateServiceDescriptor(g, service)
+	g.P()
+
 	g.P("//================== client stub ===================")
 	g.P(fmt.Sprintf(`// %[1]s is a client wrapped XClient.
 		type %[1]sClient struct{
@@ -99,6 +104,22 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	}
 
 	generateClientCloseCode(g, service)
+}
+
+func generateServiceDescriptor(g *protogen.GeneratedFile, service *protogen.Service) {
+	/*
+		genArithServiceDescriptor() *descriptor.ServiceDescriptorProto {
+			serviceDescriptorRaw = []byte{
+				0xf1, 0x12, ...
+			}
+
+		}
+	*/
+
+	proto.Marshal(service.Desc)
+
+	sd := descriptorpb.ServiceDescriptorProto{}
+	proto.Unmarshal([]byte{}, &sd)
 }
 
 func generateClientCloseCode(g *protogen.GeneratedFile, service *protogen.Service) {

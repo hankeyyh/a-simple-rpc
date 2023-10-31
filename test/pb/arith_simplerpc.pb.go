@@ -4,8 +4,10 @@ package pb
 
 import (
 	context "context"
+	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	client "github.com/hankeyyh/a-simple-rpc/client"
 	protocol "github.com/hankeyyh/a-simple-rpc/protocol"
+	"github.com/hankeyyh/a-simple-rpc/server"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -19,6 +21,16 @@ type Arith interface {
 	Sub(ctx context.Context, args *Args, reply *Reply) (err error)
 	Mul(ctx context.Context, args *Args, reply *Reply) (err error)
 	Divide(ctx context.Context, args *Args, reply *Reply) (err error)
+}
+
+func genArithServiceDescriptor() *descriptor.ServiceDescriptorProto {
+
+}
+
+func RegisterArithService(svr server.Server, serviceInstance Arith) {
+	// service proto的元数据，包含service_base_path，method_option_http_api
+	sd := genArithServiceDescriptor()
+	svr.RegisterByProto("Arith", serviceInstance, sd)
 }
 
 // ================== client stub ===================

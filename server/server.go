@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	rpc_error "github.com/hankeyyh/a-simple-rpc/error"
 	"github.com/hankeyyh/a-simple-rpc/protocol"
 	"github.com/hankeyyh/a-simple-rpc/share"
@@ -60,8 +61,9 @@ type Server struct {
 	writeTimeout time.Duration
 
 	// service map， 锁
-	serviceMap     map[string]*service
-	serviceMapLock sync.RWMutex
+	serviceMap         map[string]*service
+	serviceMapLock     sync.RWMutex
+	serviceBasePathMap map[string]string // bathPath->serviceName
 
 	// 插件
 	Plugins PluginContainer
@@ -113,6 +115,43 @@ func (svr *Server) RegisterName(serviceName string, serviceInstance interface{})
 		return err
 	}
 	return svr.Plugins.DoRegister(serviceName, serviceInstance)
+}
+
+func (svr *Server) RegisterByProto(serviceName string, serviceInstance interface{}, sd *descriptor.ServiceDescriptorProto) error {
+	_, err := svr.registerByProto(serviceName, serviceInstance, sd)
+	if err != nil {
+		return err
+	}
+
+	return svr.Plugins.DoRegister(serviceName, serviceInstance)
+}
+
+func (svr *Server) registerByProto(serviceName string, serviceInstance interface{}, sd *descriptor.ServiceDescriptorProto) (string, error) {
+	svr.serviceMapLock.Lock()
+	defer svr.serviceMapLock.Unlock()
+	instanceType := reflect.TypeOf(serviceInstance)
+	instanceValue := reflect.ValueOf(serviceInstance)
+
+	sname := reflect.Indirect(instanceValue).Type().Name()
+	if serviceName != "" {
+		sname = serviceName
+	}
+	// 合法的方法
+	validMethodMap := suitableRPCMethods(instanceType)
+	if len(validMethodMap) == 0 {
+		return sname, errors.New("register: type " + sname + " has no exported methods of suitable type")
+	}
+
+	// service 后处理，从sd解析http path
+	option := withServiceHTTPRouteOption(sd)
+
+	// 创建service
+	svc := newService(sname, instanceType, instanceValue, validMethodMap, option)
+
+	svr.serviceMap[svc.name] = svc
+	svr.serviceBasePathMap[svc.bathPath] = svc.name
+
+	return svc.name, nil
 }
 
 func (svr *Server) register(serviceName string, serviceInstance interface{}) (string, error) {
@@ -400,6 +439,17 @@ func (svr *Server) getService(servicePath string) (*service, error) {
 	svr.serviceMapLock.RUnlock()
 	if svc == nil {
 		return nil, errors.New("can't find service " + servicePath)
+	}
+	return svc, nil
+}
+
+func (svr *Server) getServiceByBathPath(serviceBathPath string) (*service, error) {
+	svr.serviceMapLock.RLock()
+	svcName := svr.serviceBasePathMap[serviceBathPath]
+	svc := svr.serviceMap[svcName]
+	svr.serviceMapLock.RUnlock()
+	if svc == nil {
+		return nil, errors.New("can't find service " + serviceBathPath)
 	}
 	return svc, nil
 }
