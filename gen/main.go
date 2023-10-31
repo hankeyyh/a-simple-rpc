@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	srpc "github.com/hankeyyh/a-simple-srpc"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -16,6 +15,7 @@ const (
 	rpcxServerPackage   = protogen.GoImportPath("github.com/hankeyyh/a-simple-rpc/server")
 	rpcxClientPackage   = protogen.GoImportPath("github.com/hankeyyh/a-simple-rpc/client")
 	rpcxProtocolPackage = protogen.GoImportPath("github.com/hankeyyh/a-simple-rpc/protocol")
+	protoPackage        = protogen.GoImportPath("google.golang.org/protobuf/proto")
 )
 
 func main() {
@@ -52,14 +52,19 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 
 	g.P("// Reference imports to suppress errors if they are not otherwise used.")
 	g.P("var _ = ", contextPackage.Ident("TODO"))
-	// g.P("var _ = ", rpcxServerPackage.Ident("NewServer"))
+	g.P("var _ = ", rpcxServerPackage.Ident("NewServer"))
 	g.P("var _ = ", rpcxClientPackage.Ident("NewClient"))
 	g.P("var _ = ", rpcxProtocolPackage.Ident("NewMessage"))
+	g.P("var _ = ", protoPackage.Ident("Marshal"))
 	g.P()
 
 	for _, service := range file.Services {
 		genService(gen, file, g, service)
 	}
+
+	g.P("//================== service descriptor ===================")
+	generateAllServiceDescriptor(file, g)
+	g.P()
 }
 
 func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile, service *protogen.Service) {
@@ -73,8 +78,8 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	g.P("}")
 	g.P()
 
-	g.P("//================== service descriptor ===================")
-	generateServiceDescriptor(g, service)
+	g.P("//================== service register ===================")
+	generateServiceRegister(g, service)
 	g.P()
 
 	g.P("//================== client stub ===================")
@@ -106,20 +111,50 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	generateClientCloseCode(g, service)
 }
 
-func generateServiceDescriptor(g *protogen.GeneratedFile, service *protogen.Service) {
+func generateServiceRegister(g *protogen.GeneratedFile, service *protogen.Service) {
 	/*
-		genArithServiceDescriptor() *descriptor.ServiceDescriptorProto {
-			serviceDescriptorRaw = []byte{
-				0xf1, 0x12, ...
+		func RegisterArithServiceByProto(svr *server.Server, instance interface{}) {
+			sd := genArithServiceDescriptor()
+			svr.RegisterByProto(Arith, instance, sd)
 			}
-
-		}
 	*/
+	serviceName := upperFirstLatter(service.GoName)
+	g.P("func Register", serviceName, "ServiceByProto(svr *server.Server, instance interface{}) error {")
+	g.P("sd := gen", serviceName, "ServiceDescriptor()")
+	g.P("return svr.RegisterByProto(", "\"", serviceName, "\"", ", instance", ", sd)")
+	g.P("}")
+}
 
-	proto.Marshal(service.Desc)
+func generateAllServiceDescriptor(file *protogen.File, g *protogen.GeneratedFile) {
+	for _, serviceDescProto := range file.Proto.Service {
+		generateServiceDescriptor(g, serviceDescProto)
+		g.P()
+	}
+}
 
-	sd := descriptorpb.ServiceDescriptorProto{}
-	proto.Unmarshal([]byte{}, &sd)
+func generateServiceDescriptor(g *protogen.GeneratedFile, service *descriptorpb.ServiceDescriptorProto) {
+	serviceName := upperFirstLatter(service.GetName())
+	g.P("func gen", serviceName, "ServiceDescriptor() *descriptorpb.ServiceDescriptorProto {")
+	g.P("serviceDescriptorRaw := []byte{")
+	descRaw, _ := proto.Marshal(service)
+	for len(descRaw) > 0 {
+		n := 16 // 一行长度
+		if n > len(descRaw) {
+			n = len(descRaw)
+		}
+		str := ""
+		for i := 0; i < n; i++ {
+			str += fmt.Sprintf("0x%02x,", descRaw[i])
+		}
+		g.P(str)
+		descRaw = descRaw[n:]
+	}
+	g.P("}")
+
+	g.P("sd := descriptorpb.ServiceDescriptorProto{}")
+	g.P("proto.Unmarshal(serviceDescriptorRaw, &sd)")
+	g.P("return &sd")
+	g.P("}")
 }
 
 func generateClientCloseCode(g *protogen.GeneratedFile, service *protogen.Service) {
@@ -143,8 +178,6 @@ func generateClientCode(g *protogen.GeneratedFile, service *protogen.Service, me
 }
 
 func generateMethod(g *protogen.GeneratedFile, method *protogen.Method) {
-	methodOptionId := proto.GetExtension(method.Desc.Options(), srpc.E_MethodOptionId).(uint32)
-	g.P(methodOptionId)
 	methodName := upperFirstLatter(method.GoName)
 	inType := g.QualifiedGoIdent(method.Input.GoIdent)
 	outType := g.QualifiedGoIdent(method.Output.GoIdent)

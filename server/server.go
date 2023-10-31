@@ -88,10 +88,11 @@ type OptionFn func(s *Server)
 
 func NewServer(options ...OptionFn) *Server {
 	s := &Server{
-		Plugins:       &pluginContainer{},
-		serviceMap:    make(map[string]*service),
-		actionConnMap: make(map[net.Conn]interface{}),
-		doneChan:      make(chan struct{}),
+		Plugins:            &pluginContainer{},
+		serviceMap:         make(map[string]*service),
+		serviceBasePathMap: make(map[string]string),
+		actionConnMap:      make(map[net.Conn]interface{}),
+		doneChan:           make(chan struct{}),
 	}
 
 	for _, fn := range options {

@@ -4,6 +4,8 @@ go 1.19
 
 require (
 	github.com/gogo/protobuf v1.3.2
+	github.com/golang/protobuf v1.5.0
+	github.com/hankeyyh/a-simple-srpc v0.0.0-20231029061518-b7f69e3285aa
 	github.com/iancoleman/strcase v0.3.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/soheilhy/cmux v0.1.5
@@ -15,7 +17,6 @@ require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/fatih/color v1.14.1 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
-	github.com/hankeyyh/a-simple-srpc v0.0.0-20231029061518-b7f69e3285aa // indirect
 	github.com/hashicorp/consul/api v1.25.1 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v1.5.0 // indirect

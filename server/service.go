@@ -46,7 +46,7 @@ type ServiceOptionFn func(s *service)
 // 用于从proto文件注册服务时，添加 http path
 func withServiceHTTPRouteOption(sd *descriptor.ServiceDescriptorProto) ServiceOptionFn {
 	serviceBathPathOption := proto.GetExtension(sd.Options, srpc.E_ServiceBasePath)
-	serviceBathPath := *(serviceBathPathOption.(*string))
+	serviceBathPath := serviceBathPathOption.(string)
 
 	getPathMap := make(map[string]string)
 	postPathMap := make(map[string]string)
